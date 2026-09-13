@@ -19,7 +19,9 @@ export function CreateAdminRoute(Options: AdminRouteOptions = {}): Hono {
     const Route = new Hono();
 
     Route.get("/admin/status", (c) => AdminController.GetStatus(c, Store, Now));
-    Route.post("/admin/setup", (c) => AdminController.Setup(c, Store, Now, SecureCookies));
+    Route.post("/admin/setup", (c) =>
+        AdminController.Setup(c, Store, Now, SecureCookies, GetClientAddress)
+    );
     Route.post("/admin/login", (c) =>
         AdminController.Login(c, FailedLogins, Store, Now, GetClientAddress, SecureCookies)
     );

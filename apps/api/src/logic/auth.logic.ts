@@ -5,9 +5,10 @@ import {
     CODEBUDDY_CN_USER_AGENT
 } from "@srouter/constants";
 import {
+    claimOAuthSessionDB,
     cleanupExpiredOAuthSessionsDB,
     deleteOAuthSessionDB,
-    getOAuthSessionDB,
+    releaseOAuthSessionDB,
     saveOAuthSessionDB,
     upsertProviderDB
 } from "@srouter/db";
@@ -17,6 +18,7 @@ import type { ProviderConfig } from "@srouter/types";
 import { registry } from "@/services/registry.js";
 import {
     AuthPollStatus,
+    type OAuthTokens,
     type AuthPollResult,
     type AuthProviderHandler,
     type OAuthLoginParams,
@@ -125,7 +127,7 @@ async function ProcessOAuthCallbackFor(
 ): Promise<ProviderConfig> {
     await CleanupExpiredSessions();
 
-    const session = await getOAuthSessionDB(state);
+    const session = await claimOAuthSessionDB(state);
     if (!session) {
         throw new Error("Invalid or expired OAuth state parameter");
     }
@@ -137,7 +139,13 @@ async function ProcessOAuthCallbackFor(
         redirectUri: session.redirectUri
     });
 
-    const rawTokens = await oAuthInstance.exchangeCodeForTokens!(code, session.codeVerifier || "");
+    let rawTokens: OAuthTokens;
+    try {
+        rawTokens = await oAuthInstance.exchangeCodeForTokens!(code, session.codeVerifier || "");
+    } catch (error) {
+        await releaseOAuthSessionDB(state);
+        throw error;
+    }
     const tokens = handler.mapOAuthTokens?.(rawTokens) ?? {
         accessToken: rawTokens.accessToken,
         refreshToken: rawTokens.refreshToken,
@@ -297,7 +305,7 @@ async function PollCodeBuddyDeviceTokenFor(
         return { status: AuthPollStatus.PENDING, error: "Missing state parameter" };
     }
 
-    const session = getOAuthSessionDB(state);
+    const session = await claimOAuthSessionDB(state);
     if (!session) {
         return { status: AuthPollStatus.PENDING, error: "Session expired or not found" };
     }
@@ -313,11 +321,13 @@ async function PollCodeBuddyDeviceTokenFor(
     try {
         poll = await options.oauth.pollToken(state);
     } catch (err) {
+        await releaseOAuthSessionDB(state);
         const msg = err instanceof Error ? err.message : String(err);
         return { status: AuthPollStatus.PENDING, error: msg };
     }
 
     if (poll.status !== AuthPollStatus.OK || !poll.accessToken) {
+        await releaseOAuthSessionDB(state);
         return { status: AuthPollStatus.PENDING, error: poll.error };
     }
 
@@ -369,7 +379,7 @@ export async function PollQoderDeviceToken(state: string): Promise<AuthPollResul
         return { status: AuthPollStatus.PENDING, error: "Missing state parameter" };
     }
 
-    const session = await getOAuthSessionDB(state);
+    const session = await claimOAuthSessionDB(state);
     if (!session) {
         return { status: AuthPollStatus.PENDING, error: "Session expired or not found" };
     }
@@ -388,11 +398,13 @@ export async function PollQoderDeviceToken(state: string): Promise<AuthPollResul
             codeVerifier: session.codeVerifier || ""
         });
     } catch (err) {
+        await releaseOAuthSessionDB(state);
         const msg = err instanceof Error ? err.message : String(err);
         return { status: AuthPollStatus.PENDING, error: msg };
     }
 
     if (poll.status !== AuthPollStatus.OK || !poll.accessToken) {
+        await releaseOAuthSessionDB(state);
         return { status: AuthPollStatus.PENDING };
     }
 

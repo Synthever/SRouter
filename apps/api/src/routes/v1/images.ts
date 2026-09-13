@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { ImageGenerationRequestSchema } from "@srouter/types";
 import { ImagesController } from "@/controllers/images.controller.js";
 import { ApiKeyAuth } from "@/middleware/ApiKeyAuth.js";
+import { EnforceModelAccess } from "@/middleware/ModelAccess.js";
 import { EnforceRateLimit } from "@/middleware/RateLimit.js";
 
 const imagesRouter = new Hono();
@@ -25,6 +26,7 @@ imagesRouter.post(
             );
         }
     }),
+    EnforceModelAccess(),
     ImagesController.generate
 );
 

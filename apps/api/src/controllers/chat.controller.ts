@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ChatCompletionRequest, APIKeyZod } from "@srouter/types";
+import { reserveAPIKeyQuotaDB } from "@srouter/db";
 import { ChatLogic } from "@/logic/chat.logic.js";
 import { Err, FormatErrorPayload, Ok, ToContentfulStatusCode } from "@/utils/response.js";
 
@@ -14,11 +15,19 @@ function NormalizeDeveloperRole(Body: ChatCompletionRequest): ChatCompletionRequ
 export class ChatController {
     public static async CreateCompletion(c: Context): Promise<Response> {
         const StartTime = Date.now();
-        const Body = NormalizeDeveloperRole(
-            c.req.valid("json" as never) as ChatCompletionRequest
-        );
+        const Body = NormalizeDeveloperRole(c.req.valid("json" as never) as ChatCompletionRequest);
         const ApiKeyRow = c.get("apiKeyRow") as APIKeyZod | undefined;
         const ApiKeyId = ApiKeyRow?.id;
+        const ReservedTokens = ApiKeyId ? (Body.max_tokens ?? 4096) : undefined;
+        if (
+            ApiKeyId &&
+            ReservedTokens !== undefined &&
+            !(await reserveAPIKeyQuotaDB(ApiKeyId, ReservedTokens))
+        ) {
+            return Err(c, "Token quota exceeded. The requested budget is unavailable.", 429, {
+                code: "quota_exceeded"
+            });
+        }
         const userAgent = c.req.header("user-agent");
         const rawIp =
             c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -39,7 +48,9 @@ export class ChatController {
                         0,
                         ApiKeyId,
                         rawIp,
-                        userAgent
+                        userAgent,
+                        undefined,
+                        ReservedTokens
                     );
                     for await (const Chunk of Generator) {
                         await stream.writeSSE({

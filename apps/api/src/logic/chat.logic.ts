@@ -1,4 +1,11 @@
-import { getTokenSaverSettingsDB, logRequestDB, incrementAPIKeyUsageDB } from "@srouter/db";
+import {
+    getTokenSaverSettingsDB,
+    incrementAPIKeyUsageDB,
+    logRequestDB,
+    releaseAPIKeyQuotaDB,
+    reserveAPIKeyQuotaDB,
+    settleAPIKeyQuotaDB
+} from "@srouter/db";
 import { applyTokenSaver, estimateCostForUsage, extractUsageBreakdown } from "@srouter/translator";
 import { providerTypeForAlias } from "@srouter/constants";
 import type {
@@ -45,6 +52,7 @@ async function LogCompletion(
         fallbackPath?: string[];
         fallbackReason?: string;
         apiKeyId?: string;
+        reservedTokens?: number;
         ipAddress?: string;
         userAgent?: string;
     }
@@ -64,7 +72,20 @@ async function LogCompletion(
             : undefined;
 
     if (options.statusCode === 200 && options.apiKeyId && breakdown.total_tokens > 0) {
-        incrementAPIKeyUsageDB(options.apiKeyId, breakdown.total_tokens, estimatedCost ?? 0);
+        if (options.reservedTokens === undefined) {
+            await incrementAPIKeyUsageDB(
+                options.apiKeyId,
+                breakdown.total_tokens,
+                estimatedCost ?? 0
+            );
+        } else {
+            await settleAPIKeyQuotaDB(
+                options.apiKeyId,
+                options.reservedTokens,
+                breakdown.total_tokens
+            );
+            await incrementAPIKeyUsageDB(options.apiKeyId, 0, estimatedCost ?? 0);
+        }
     }
 
     logRequestDB({
@@ -135,7 +156,8 @@ export class ChatLogic {
         apiKeyId?: string,
         ipAddress?: string,
         userAgent?: string,
-        budget?: RequestAttemptBudget
+        budget?: RequestAttemptBudget,
+        reservedTokens?: number
     ): Promise<ChatCompletionResponse> {
         const requestBudget = budget ?? CreateRequestAttemptBudget();
         const ctx: RequestContext = { startTime, depth, apiKeyId, ipAddress, userAgent };
@@ -193,7 +215,8 @@ export class ChatLogic {
                         apiKeyId,
                         ipAddress,
                         userAgent,
-                        requestBudget
+                        requestBudget,
+                        reservedTokens
                     );
                 }
 
@@ -204,6 +227,7 @@ export class ChatLogic {
                     fallbackPath: tracker.fallbackPath,
                     fallbackReason: tracker.fallbackReason,
                     apiKeyId,
+                    reservedTokens,
                     ipAddress,
                     userAgent
                 });
@@ -217,7 +241,10 @@ export class ChatLogic {
             }
         }
 
-        LogFailure(originalModel, ctx, tracker);
+        if (apiKeyId && reservedTokens !== undefined) {
+            await releaseAPIKeyQuotaDB(apiKeyId, reservedTokens);
+        }
+        await LogFailure(originalModel, ctx, tracker);
         throw tracker.lastError;
     }
 
@@ -230,7 +257,8 @@ export class ChatLogic {
         apiKeyId?: string,
         ipAddress?: string,
         userAgent?: string,
-        budget?: RequestAttemptBudget
+        budget?: RequestAttemptBudget,
+        reservedTokens?: number
     ): AsyncGenerator<ChatCompletionChunk, void, void> {
         const requestBudget = budget ?? CreateRequestAttemptBudget();
         const ctx: RequestContext = { startTime, depth, apiKeyId, ipAddress, userAgent };
@@ -342,7 +370,8 @@ export class ChatLogic {
                         apiKeyId,
                         ipAddress,
                         userAgent,
-                        requestBudget
+                        requestBudget,
+                        reservedTokens
                     );
                     return;
                 }
@@ -351,13 +380,14 @@ export class ChatLogic {
                     yield chunk;
                 }
 
-                LogCompletion(providerId, currentModel, startTime, {
+                await LogCompletion(providerId, currentModel, startTime, {
                     statusCode: 200,
                     usage,
                     fallbackOccurred: tracker.fallbackOccurred,
                     fallbackPath: tracker.fallbackPath,
                     fallbackReason: tracker.fallbackReason,
                     apiKeyId,
+                    reservedTokens,
                     ipAddress,
                     userAgent
                 });
@@ -380,14 +410,21 @@ export class ChatLogic {
                         fallbackPath: tracker.fallbackPath,
                         fallbackReason: tracker.fallbackReason,
                         apiKeyId,
+                        reservedTokens,
                         ipAddress,
                         userAgent
                     });
+                    if (apiKeyId && reservedTokens !== undefined) {
+                        await releaseAPIKeyQuotaDB(apiKeyId, reservedTokens);
+                    }
                     throw err;
                 }
             }
         }
 
+        if (apiKeyId && reservedTokens !== undefined) {
+            await releaseAPIKeyQuotaDB(apiKeyId, reservedTokens);
+        }
         if (tracker.lastError) throw tracker.lastError;
     }
 

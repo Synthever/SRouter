@@ -220,7 +220,9 @@ export class ProvidersLogic {
 
         const CustomModels = await ProvidersLogic.ListCustomModels(ProviderId);
         const HiddenModels = new Set(
-            (await getHiddenModelsByProviderDB(ProviderId.toLowerCase())).map((Row) => Row.modelId.toLowerCase())
+            (await getHiddenModelsByProviderDB(ProviderId.toLowerCase())).map((Row) =>
+                Row.modelId.toLowerCase()
+            )
         );
         if (CustomModels.length > 0) {
             const Merged = new Map<string, ModelObject>();
@@ -271,11 +273,9 @@ export class ProvidersLogic {
         const BaseUrl = Payload.base_url?.trim();
         if (BaseUrl) {
             try {
-                const Url = new URL(BaseUrl);
-                if (!["http:", "https:"].includes(Url.protocol))
-                    throw new Error("unsupported protocol");
+                await AssertPublicUrl(BaseUrl);
             } catch {
-                throw new Error("Base URL must be a valid HTTP or HTTPS URL");
+                throw new Error("Base URL must be a valid public HTTP or HTTPS URL");
             }
         }
         const ApiKey = Payload.api_key?.trim();
@@ -342,10 +342,15 @@ export class ProvidersLogic {
     }
 
     public static async ListHiddenModels(ProviderId: string): Promise<string[]> {
-        return (await getHiddenModelsByProviderDB(ProviderId.toLowerCase())).map((Row) => Row.modelId);
+        return (await getHiddenModelsByProviderDB(ProviderId.toLowerCase())).map(
+            (Row) => Row.modelId
+        );
     }
 
-    public static async SetRoundRobin(ProviderId: string, Enabled: boolean): Promise<ProviderDefinition> {
+    public static async SetRoundRobin(
+        ProviderId: string,
+        Enabled: boolean
+    ): Promise<ProviderDefinition> {
         const Id = ProviderId.toLowerCase();
         const Exists =
             DEFAULT_PROVIDER_MAP[Id] !== undefined ||

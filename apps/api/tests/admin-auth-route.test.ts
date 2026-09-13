@@ -63,7 +63,7 @@ test("local setup creates an account and establishes a session", async () => {
     });
 });
 
-test("remote setup is first-come-wins and closes after the first account", async () => {
+test("remote setup is rejected before the first account exists", async () => {
     const { app } = createTestApp({ address: "192.168.1.10" });
 
     const first = await app.request("/v1/admin/setup", {
@@ -74,7 +74,7 @@ test("remote setup is first-come-wins and closes after the first account", async
             confirmation: "correct horse battery staple"
         })
     });
-    assert.equal(first.status, 201);
+    assert.equal(first.status, 403);
 
     const second = await app.request("/v1/admin/setup", {
         method: "POST",
@@ -84,7 +84,7 @@ test("remote setup is first-come-wins and closes after the first account", async
             confirmation: "another correct password"
         })
     });
-    assert.equal(second.status, 409);
+    assert.equal(second.status, 403);
 });
 
 test("login and logout manage the admin session", async () => {

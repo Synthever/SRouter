@@ -29,7 +29,7 @@
         "@srouter/providers": "workspace:*",
         "@srouter/translator": "workspace:*",
         "@srouter/types": "workspace:*",
-        "hono": "^4.13.1",
+        "hono": "^4.13.7",
         "zod": "^3.24.2"
     },
     "devDependencies": {

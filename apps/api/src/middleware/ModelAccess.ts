@@ -6,10 +6,7 @@ function NormalizeModelId(model: string): string {
     return model.replace(/^srouter\//, "").toLowerCase();
 }
 
-export function IsModelAllowed(
-    allowedModels: string[] | null | undefined,
-    model: string
-): boolean {
+export function IsModelAllowed(allowedModels: string[] | null | undefined, model: string): boolean {
     if (!allowedModels || allowedModels.length === 0) return true;
 
     const Requested = NormalizeModelId(model);
@@ -27,7 +24,10 @@ export function IsModelAllowed(
         const bareAllowed = allowedParts[allowedParts.length - 1];
         const bareRequested = requestedParts[requestedParts.length - 1];
 
-        return bareAllowed === bareRequested;
+        return (
+            bareAllowed === bareRequested &&
+            (allowedParts.length === 1 || requestedParts.length === 1)
+        );
     });
 }
 

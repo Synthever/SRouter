@@ -12,7 +12,8 @@ import {
     revokeAdminSession,
     validateAdminPassword,
     verifyAdminPassword,
-    verifyAdminSession
+    verifyAdminSession,
+    isLoopbackAddress
 } from "@/services/adminAuth.js";
 
 const MAX_LOGIN_FAILURES = 5;
@@ -46,7 +47,11 @@ export class AdminController {
         Store: AdminAuthStore = adminAuthStore,
         Now: () => number = () => Date.now()
     ): Promise<Response> {
-        const Authenticated = await verifyAdminSession(Store, getCookie(c, ADMIN_SESSION_COOKIE), Now());
+        const Authenticated = await verifyAdminSession(
+            Store,
+            getCookie(c, ADMIN_SESSION_COOKIE),
+            Now()
+        );
         return Ok(c, {
             setupRequired: !(await Store.hasAdminAccount()),
             authenticated: Authenticated
@@ -57,8 +62,17 @@ export class AdminController {
         c: Context,
         Store: AdminAuthStore = adminAuthStore,
         Now: () => number = () => Date.now(),
-        SecureCookies = process.env.SROUTER_SECURE_COOKIES === "true"
+        SecureCookies = process.env.SROUTER_SECURE_COOKIES === "true",
+        GetClientAddress: (
+            c: Context
+        ) => string | undefined = AdminController.GetDirectClientAddress
     ): Promise<Response> {
+        if (!isLoopbackAddress(GetClientAddress(c))) {
+            return Err(c, "Admin setup is only available from the local machine", 403, {
+                code: "setup_local_only"
+            });
+        }
+
         if (await Store.hasAdminAccount()) {
             return Err(c, "Admin setup has already been completed", 409, {
                 code: "setup_already_complete"
@@ -86,7 +100,10 @@ export class AdminController {
             });
         }
 
-        const Created = await Store.createAdminAccount(hashAdminPassword(Parsed.data.password), Now());
+        const Created = await Store.createAdminAccount(
+            hashAdminPassword(Parsed.data.password),
+            Now()
+        );
         if (!Created) {
             return Err(c, "Admin setup has already been completed", 409, {
                 code: "setup_already_complete"
@@ -187,7 +204,10 @@ export class AdminController {
             });
         }
 
-        const Updated = await Store.updatePasswordHash(hashAdminPassword(Parsed.data.new_password), Now());
+        const Updated = await Store.updatePasswordHash(
+            hashAdminPassword(Parsed.data.new_password),
+            Now()
+        );
         if (!Updated) {
             return Err(c, "Failed to update admin password", 500, {
                 code: "password_update_failed"
