@@ -69,3 +69,7 @@ test("IsModelAllowed matches models with or without provider prefix", async () =
     assert.equal(IsModelAllowed(["claude-3-5-sonnet"], "anthropic/claude-3-5-sonnet"), true);
     assert.equal(IsModelAllowed(["openai/gpt-4o"], "openai/gpt-4o-mini"), false);
 });
+
+test("IsModelAllowed rejects cross-provider qualified models", async () => {
+    assert.equal(IsModelAllowed(["openai/gpt-4o"], "anthropic/gpt-4o"), false);
+});

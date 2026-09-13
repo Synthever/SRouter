@@ -82,20 +82,24 @@ export async function createAPIKeyDB(data: {
     const CreditLimit = data.credit_limit ?? data.creditLimit ?? 0;
     const Enabled = data.enabled !== undefined ? (data.enabled ? 1 : 0) : 1;
 
-    await db.prepare(`
+    await db
+        .prepare(
+            `
         INSERT INTO api_keys (id, key, name, enabled, rate_limit, quota_limit, usage_tokens, credit_limit, usage_cost, allowed_models, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)
-    `).run(
-        Id,
-        Key,
-        data.name,
-        Enabled,
-        RateLimit,
-        QuotaLimit,
-        CreditLimit,
-        AllowedModelsJson,
-        CreatedAt
-    );
+    `
+        )
+        .run(
+            Id,
+            Key,
+            data.name,
+            Enabled,
+            RateLimit,
+            QuotaLimit,
+            CreditLimit,
+            AllowedModelsJson,
+            CreatedAt
+        );
 
     return {
         id: Id,
@@ -112,18 +116,51 @@ export async function createAPIKeyDB(data: {
     };
 }
 
-export async function incrementAPIKeyUsageDB(keyId: string, tokens: number, cost = 0): Promise<void> {
-    await db.prepare(
-        "UPDATE api_keys SET usage_tokens = usage_tokens + ?, usage_cost = usage_cost + ? WHERE id = ?"
-    ).run(tokens, cost, keyId);
+export async function incrementAPIKeyUsageDB(
+    keyId: string,
+    tokens: number,
+    cost = 0
+): Promise<void> {
+    await db
+        .prepare(
+            "UPDATE api_keys SET usage_tokens = usage_tokens + ?, usage_cost = usage_cost + ? WHERE id = ?"
+        )
+        .run(tokens, cost, keyId);
+}
+
+export async function reserveAPIKeyQuotaDB(keyId: string, tokens: number): Promise<boolean> {
+    if (tokens <= 0) return true;
+    const Result = await db
+        .prepare(
+            "UPDATE api_keys SET usage_tokens = usage_tokens + ? WHERE id = ? AND (quota_limit = 0 OR usage_tokens + ? <= quota_limit)"
+        )
+        .run(tokens, keyId, tokens);
+    return num(Result.changes) > 0;
+}
+
+export async function settleAPIKeyQuotaDB(
+    keyId: string,
+    reservedTokens: number,
+    actualTokens: number
+): Promise<void> {
+    const Difference = actualTokens - reservedTokens;
+    if (Difference === 0) return;
+    await db
+        .prepare("UPDATE api_keys SET usage_tokens = usage_tokens + ? WHERE id = ?")
+        .run(Difference, keyId);
+}
+
+export async function releaseAPIKeyQuotaDB(keyId: string, reservedTokens: number): Promise<void> {
+    await settleAPIKeyQuotaDB(keyId, reservedTokens, 0);
 }
 
 export async function addCreditAPIKeyDB(id: string, amount: number): Promise<APIKeyZod | null> {
-    await db.prepare("UPDATE api_keys SET credit_limit = credit_limit + ? WHERE id = ?").run(amount, id);
+    await db
+        .prepare("UPDATE api_keys SET credit_limit = credit_limit + ? WHERE id = ?")
+        .run(amount, id);
 
     const Row = (await db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id)) as unknown as
-        | APIKeyRow
-        | undefined;
+        APIKeyRow | undefined;
     if (!Row) return null;
     return mapAPIKeyRow(Row);
 }
@@ -142,9 +179,9 @@ export async function updateAPIKeyDB(
         allowed_models?: string[] | null;
     }
 ): Promise<APIKeyZod | null> {
-    const existing = (await db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id)) as unknown as
-        | APIKeyRow
-        | undefined;
+    const existing = (await db
+        .prepare("SELECT * FROM api_keys WHERE id = ?")
+        .get(id)) as unknown as APIKeyRow | undefined;
     if (!existing) return null;
 
     const fields: string[] = [];
@@ -187,9 +224,9 @@ export async function updateAPIKeyDB(
         await db.prepare(`UPDATE api_keys SET ${fields.join(", ")} WHERE id = ?`).run(...values);
     }
 
-    const updatedRow = (await db.prepare("SELECT * FROM api_keys WHERE id = ?").get(id)) as unknown as
-        | APIKeyRow
-        | undefined;
+    const updatedRow = (await db
+        .prepare("SELECT * FROM api_keys WHERE id = ?")
+        .get(id)) as unknown as APIKeyRow | undefined;
     return updatedRow ? mapAPIKeyRow(updatedRow) : null;
 }
 

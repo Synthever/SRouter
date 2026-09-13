@@ -183,7 +183,8 @@ const TABLES: TableDef[] = [
             { name: "code_verifier", definition: "TEXT NOT NULL" },
             { name: "client_id", definition: "TEXT NOT NULL" },
             { name: "redirect_uri", definition: "TEXT NOT NULL" },
-            { name: "created_at", definition: "INTEGER NOT NULL" }
+            { name: "created_at", definition: "INTEGER NOT NULL" },
+            { name: "claimed_at", definition: "INTEGER" }
         ]
     },
     {
@@ -234,15 +235,29 @@ const TABLES: TableDef[] = [
 ];
 
 const INDEXES: IndexDef[] = [
-    { sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_created_at ON request_logs(created_at DESC);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_created ON request_logs(provider_id, created_at DESC);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model ON request_logs(provider_id, model);" },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_created_at ON request_logs(created_at DESC);"
+    },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_created ON request_logs(provider_id, created_at DESC);"
+    },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_provider_model ON request_logs(provider_id, model);"
+    },
     { sql: "CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_fallback_rules_priority ON fallback_rules(priority ASC, created_at ASC);" },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_fallback_rules_priority ON fallback_rules(priority ASC, created_at ASC);"
+    },
     { sql: "CREATE INDEX IF NOT EXISTS idx_providers_provider_id ON providers(provider_id);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_custom_models_provider ON custom_models(provider_id, created_at ASC);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_hidden_models_provider ON hidden_models(provider_id, created_at ASC);" },
-    { sql: "CREATE INDEX IF NOT EXISTS idx_favorite_models_created ON favorite_models(created_at ASC);" }
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_custom_models_provider ON custom_models(provider_id, created_at ASC);"
+    },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_hidden_models_provider ON hidden_models(provider_id, created_at ASC);"
+    },
+    {
+        sql: "CREATE INDEX IF NOT EXISTS idx_favorite_models_created ON favorite_models(created_at ASC);"
+    }
 ];
 
 const ADMIN_TABLES = (pg: boolean) => {
@@ -307,7 +322,9 @@ function initSqliteSchemaSync(): void {
         raw.exec(index.sql);
     }
     raw.exec(ADMIN_TABLES(false));
-    raw.exec("CREATE TABLE IF NOT EXISTS srouter_schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);");
+    raw.exec(
+        "CREATE TABLE IF NOT EXISTS srouter_schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+    );
     raw.prepare("INSERT OR IGNORE INTO srouter_schema_meta (key, value) VALUES (?, ?)").run(
         "schema_version",
         TRANSFER_SCHEMA_VERSION
@@ -342,6 +359,7 @@ function initSqliteSchemaSync(): void {
         { name: "last_refreshed_at", definition: "last_refreshed_at INTEGER" },
         { name: "organization_id", definition: "organization_id TEXT" }
     ]);
+    ensureSync("oauth_sessions", [{ name: "claimed_at", definition: "claimed_at INTEGER" }]);
     ensureSync("api_keys", [
         { name: "allowed_models", definition: "allowed_models TEXT" },
         { name: "credit_limit", definition: "credit_limit REAL DEFAULT 0" },
@@ -351,7 +369,10 @@ function initSqliteSchemaSync(): void {
         { name: "ip_address", definition: "ip_address TEXT" },
         { name: "user_agent", definition: "user_agent TEXT" },
         { name: "cached_tokens", definition: "cached_tokens INTEGER NOT NULL DEFAULT 0" },
-        { name: "cache_creation_tokens", definition: "cache_creation_tokens INTEGER NOT NULL DEFAULT 0" },
+        {
+            name: "cache_creation_tokens",
+            definition: "cache_creation_tokens INTEGER NOT NULL DEFAULT 0"
+        },
         { name: "reasoning_tokens", definition: "reasoning_tokens INTEGER NOT NULL DEFAULT 0" },
         { name: "estimated_cost", definition: "estimated_cost REAL NOT NULL DEFAULT 0" },
         { name: "fallback_occurred", definition: "fallback_occurred INTEGER NOT NULL DEFAULT 0" },
@@ -379,6 +400,9 @@ async function initPostgresSchema(): Promise<void> {
         { name: "last_refreshed_at", definition: "last_refreshed_at INTEGER" },
         { name: "organization_id", definition: "organization_id TEXT" }
     ]);
+    await ensureColumns("oauth_sessions", [
+        { name: "claimed_at", definition: "claimed_at BIGINT" }
+    ]);
     await ensureColumns("api_keys", [
         { name: "allowed_models", definition: "allowed_models TEXT" },
         { name: "credit_limit", definition: "credit_limit REAL DEFAULT 0" },
@@ -388,7 +412,10 @@ async function initPostgresSchema(): Promise<void> {
         { name: "ip_address", definition: "ip_address TEXT" },
         { name: "user_agent", definition: "user_agent TEXT" },
         { name: "cached_tokens", definition: "cached_tokens INTEGER NOT NULL DEFAULT 0" },
-        { name: "cache_creation_tokens", definition: "cache_creation_tokens INTEGER NOT NULL DEFAULT 0" },
+        {
+            name: "cache_creation_tokens",
+            definition: "cache_creation_tokens INTEGER NOT NULL DEFAULT 0"
+        },
         { name: "reasoning_tokens", definition: "reasoning_tokens INTEGER NOT NULL DEFAULT 0" },
         { name: "estimated_cost", definition: "estimated_cost REAL NOT NULL DEFAULT 0" },
         { name: "fallback_occurred", definition: "fallback_occurred INTEGER NOT NULL DEFAULT 0" },

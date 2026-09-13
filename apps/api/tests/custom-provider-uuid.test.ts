@@ -19,7 +19,7 @@ test("AddProvider generates a UUID v4 as immutable internal ID", async () => {
         name: "My Gateway",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://api.example.com/v1",
+        base_url: "https://example.com/api/v1",
         api_key: "sk-test-key"
     });
 
@@ -47,7 +47,7 @@ test("UUID provider appears in catalog as its own entry", async () => {
         name: "Custom Gateway",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://api.gateway.dev/v1",
+        base_url: "https://example.com/gateway/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(result.id);
@@ -68,7 +68,7 @@ test("UUID provider is found by GetProviderById", async () => {
         name: "Searchable Provider",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://search.example.com/v1",
+        base_url: "https://example.com/search/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(result.id);
@@ -108,7 +108,7 @@ test("ListProviders lists UUID provider", async () => {
         name: "Listed Provider",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://listme.example.com/v1",
+        base_url: "https://example.com/listme/v1",
         api_key: "sk-list-key"
     });
     createdIds.push(result.id);
@@ -125,7 +125,7 @@ test("UUID persists across GetCatalog calls (no re-generation)", async () => {
         name: "Stable UUID",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://stable.example.com/v1",
+        base_url: "https://example.com/stable/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(result.id);
@@ -169,7 +169,7 @@ test("custom provider with UUID does not collide with seed provider IDs", async 
         name: "No Collision",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://nocollide.example.com/v1",
+        base_url: "https://example.com/nocollide/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(result.id);
@@ -189,7 +189,7 @@ test("duplicate names are allowed for different UUID providers", async () => {
         name: "Duplicate Name",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://first.dup.com/v1",
+        base_url: "https://example.com/first-dup/v1",
         api_key: "sk-first-dup"
     });
     createdIds.push(first.id);
@@ -198,7 +198,7 @@ test("duplicate names are allowed for different UUID providers", async () => {
         name: "Duplicate Name",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://second.dup.com/v1",
+        base_url: "https://example.com/second-dup/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(second.id);
@@ -218,7 +218,7 @@ test("delete provider by UUID works", async () => {
         name: "Delete Me",
         category: "custom_provider",
         protocol: "openai",
-        base_url: "https://deleteme.example.com/v1",
+        base_url: "https://example.com/deleteme/v1",
         api_key: "«redacted:sk-…»"
     });
     createdIds.push(result.id);
@@ -231,7 +231,11 @@ test("delete provider by UUID works", async () => {
     assert.ok(deleted, "deleteProviderDB must return true");
 
     // Verify deleted
-    assert.equal(await await getProviderByIdDB(result.id), null, "Provider must be gone after delete");
+    assert.equal(
+        await await getProviderByIdDB(result.id),
+        null,
+        "Provider must be gone after delete"
+    );
     // Remove from cleanup list since already deleted
     createdIds.splice(createdIds.indexOf(result.id), 1);
 });

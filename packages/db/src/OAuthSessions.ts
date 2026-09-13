@@ -7,6 +7,7 @@ export interface OAuthSession {
     clientId?: string;
     redirectUri?: string;
     createdAt?: number;
+    claimedAt?: number;
 }
 
 interface OAuthSessionRow {
@@ -15,6 +16,7 @@ interface OAuthSessionRow {
     client_id: string;
     redirect_uri: string;
     created_at: number;
+    claimed_at: number | null;
 }
 
 export async function saveOAuthSessionDB(session: OAuthSession): Promise<OAuthSession> {
@@ -34,13 +36,15 @@ export async function saveOAuthSessionDB(session: OAuthSession): Promise<OAuthSe
                redirect_uri = excluded.redirect_uri,
                created_at = excluded.created_at`;
 
-    await db.prepare(UpsertSql).run(
-        session.state,
-        session.codeVerifier ?? "",
-        session.clientId ?? "",
-        session.redirectUri ?? "",
-        session.createdAt ?? Date.now()
-    );
+    await db
+        .prepare(UpsertSql)
+        .run(
+            session.state,
+            session.codeVerifier ?? "",
+            session.clientId ?? "",
+            session.redirectUri ?? "",
+            session.createdAt ?? Date.now()
+        );
 
     return session;
 }
@@ -57,8 +61,27 @@ export async function getOAuthSessionDB(state: string): Promise<OAuthSession | n
         codeVerifier: str(Row.code_verifier),
         clientId: str(Row.client_id),
         redirectUri: str(Row.redirect_uri),
-        createdAt: num(Row.created_at)
+        createdAt: num(Row.created_at),
+        claimedAt: Row.claimed_at === null ? undefined : num(Row.claimed_at)
     };
+}
+
+export async function claimOAuthSessionDB(
+    state: string,
+    now = Date.now()
+): Promise<OAuthSession | null> {
+    const Result = await db
+        .prepare("UPDATE oauth_sessions SET claimed_at = ? WHERE state = ? AND claimed_at IS NULL")
+        .run(now, state);
+    if (num(Result.changes) === 0) return null;
+    return getOAuthSessionDB(state);
+}
+
+export async function releaseOAuthSessionDB(state: string): Promise<boolean> {
+    const Result = await db
+        .prepare("UPDATE oauth_sessions SET claimed_at = NULL WHERE state = ?")
+        .run(state);
+    return num(Result.changes) > 0;
 }
 
 export async function deleteOAuthSessionDB(state: string): Promise<boolean> {
