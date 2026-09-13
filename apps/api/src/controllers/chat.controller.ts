@@ -85,7 +85,9 @@ export class ChatController {
                 0,
                 ApiKeyId,
                 rawIp,
-                userAgent
+                userAgent,
+                undefined,
+                ReservedTokens
             );
             return Ok(c, ResponseData);
         } catch (error) {
