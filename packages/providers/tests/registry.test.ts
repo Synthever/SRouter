@@ -319,6 +319,30 @@ test("custom provider alias matches via exact alias when model list is empty", a
     assert.equal(p.id, uuid);
 });
 
+test("disabled custom provider alias is excluded from routing", async () => {
+    const registry = new ProviderRegistry();
+    const uuid = "ffffffff-ffff-4fff-ffff-ffffffffffff";
+    const customProvider: AIProvider = {
+        id: uuid,
+        name: "Disabled Gateway",
+        alias: "disabled-gateway",
+        listModels: async () => [],
+        chatCompletion: async () => {
+            throw new Error("not used");
+        },
+        chatCompletionStream: async function* () {
+            throw new Error("not used");
+        }
+    };
+    registry.registerProvider(customProvider);
+    registry.setProviderEnabled(uuid, false);
+
+    await assert.rejects(
+        registry.getCandidateProvidersForModel("disabled-gateway/gpt-4o"),
+        /No active provider connection found/
+    );
+});
+
 test("custom alias wins over a built-in provider's alias for the same prefix", async () => {
     const registry = new ProviderRegistry();
     const qoderBuiltin: AIProvider = {

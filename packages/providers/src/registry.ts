@@ -400,14 +400,20 @@ export class ProviderRegistry {
             const prefix = modelId.includes("/") ? (modelId.split("/")[0] ?? modelId) : modelId;
             const exactAlias = Array.from(this.providers.values()).find(
                 (provider) =>
-                    provider.id !== "default" && provider.alias && provider.alias === prefix
+                    provider.id !== "default" &&
+                    this.isProviderEnabled(provider.id) &&
+                    provider.alias &&
+                    provider.alias === prefix
             );
             if (exactAlias) {
                 candidates.push(exactAlias);
             } else {
                 // Fallback: derived alias (via constants catalog) or base ID matching
                 const derivedAlias = Array.from(this.providers.values()).find(
-                    (provider) => provider.id !== "default" && providerAliasFor(provider) === prefix
+                    (provider) =>
+                        provider.id !== "default" &&
+                        this.isProviderEnabled(provider.id) &&
+                        providerAliasFor(provider) === prefix
                 );
                 if (derivedAlias) {
                     candidates.push(derivedAlias);
