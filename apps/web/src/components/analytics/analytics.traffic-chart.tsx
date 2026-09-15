@@ -1,4 +1,4 @@
-import { formatTime, formatTimeUnit } from "@/utils/format";
+import { formatTime, formatTimeUnit, formatTooltipTime } from "@/utils/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import type { TooltipValueType } from "recharts";
 import type { AnalyticsBucket } from "@srouter/types";
@@ -10,7 +10,7 @@ interface Props {
 
 export function TrafficChart({ buckets, bucketSizeMs }: Props) {
     const data = buckets.map((b) => ({
-        time: formatTime(b.bucketStart, bucketSizeMs),
+        bucketStart: b.bucketStart,
         success: b.successRequests,
         error: b.errorRequests
     }));
@@ -34,14 +34,19 @@ export function TrafficChart({ buckets, bucketSizeMs }: Props) {
                 <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={data} stackOffset="sign">
                         <XAxis
-                            dataKey="time"
+                            dataKey="bucketStart"
+                            angle={-45}
+                            textAnchor="end"
+                            height={64}
+                            tickMargin={8}
                             tick={{
-                                fontSize: 11,
+                                fontSize: 9,
                                 fill: "var(--text-muted)",
                                 fontFamily: "var(--font-mono)"
                             }}
                             tickLine={false}
                             axisLine={{ stroke: "var(--hairline-soft)" }}
+                            tickFormatter={(value) => formatTime(Number(value), bucketSizeMs)}
                             interval="preserveStartEnd"
                         />
                         <YAxis
@@ -69,6 +74,7 @@ export function TrafficChart({ buckets, bucketSizeMs }: Props) {
                                 value: TooltipValueType | undefined,
                                 name: string | number | undefined
                             ) => [`${Number(value ?? 0).toLocaleString()} requests`, name]}
+                            labelFormatter={(value) => formatTooltipTime(Number(value))}
                             cursor={{ fill: "var(--canvas-soft)", opacity: 0.6 }}
                         />
                         <Legend

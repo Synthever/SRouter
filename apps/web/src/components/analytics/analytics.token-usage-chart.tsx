@@ -58,8 +58,12 @@ export function TokenUsageChart({ buckets, bucketSizeMs }: Props) {
                         </defs>
                         <XAxis
                             dataKey="time"
+                            angle={-45}
+                            textAnchor="end"
+                            height={64}
+                            tickMargin={8}
                             tick={{
-                                fontSize: 11,
+                                fontSize: 9,
                                 fill: "var(--text-muted)",
                                 fontFamily: "var(--font-mono)"
                             }}

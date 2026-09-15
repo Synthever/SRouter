@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Database } from "lucide-react";
 import { formatCompactNumber, formatNumber } from "@/lib/utils";
+import { formatDuration } from "@/utils/format";
 
 interface Props {
     totalRequests: number;
@@ -41,7 +42,7 @@ export function AnalyticsStatCards({
                         </div>
                     </div>
                 </div>
-                <div className="mt-4 flex items-center gap-3.5 border-t border-hairline-soft pt-3 text-xs text-text-muted font-mono tabular-nums">
+                <div className="mt-4 flex w-full items-center justify-between border-t border-hairline-soft pt-3 text-xs text-text-muted font-mono tabular-nums">
                     <span
                         className="inline-flex items-center gap-1"
                         title={`Prompt Tokens: ${formatNumber(promptTokens)}`}
@@ -111,10 +112,7 @@ export function AnalyticsStatCards({
                     </span>
                     <div className="mt-3">
                         <div className="text-3xl font-bold tracking-tight text-ink font-mono tabular-nums">
-                            {p95LatencyMs.toFixed(0)}
-                            <span className="ml-1.5 text-xs font-normal text-text-muted font-sans">
-                                ms
-                            </span>
+                            {formatDuration(p95LatencyMs)}
                         </div>
                     </div>
                 </div>

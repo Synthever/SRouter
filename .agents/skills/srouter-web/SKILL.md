@@ -8,12 +8,12 @@ platforms: [linux, macos, windows]
 metadata:
     hermes:
         tags: [srouter, react, dashboard, tanstack, responsive-ui]
-        related_skills: [srouter-task-workflow]
+        related_skills: [srouter-task-workflow, shadcn]
 ---
 
 # SRouter Web Skill
 
-Use this skill for `apps/web`: React routes, dashboard components, provider UI, TanStack Query, streaming UX, layouts, themes, and `/v1` integration.
+Use this skill for `apps/web`: React routes, dashboard components, provider UI, TanStack Query, streaming UX, layouts, themes, and `/v1` integration. UI work must also load `shadcn` before inspecting or editing components.
 
 ## When to Use
 
@@ -27,6 +27,7 @@ Use this skill for `apps/web`: React routes, dashboard components, provider UI, 
 - Use `src/lib/api.ts` and TanStack Query. Do not hand-edit `src/routeTree.gen.ts`.
 - Use shared contracts from `@srouter/types` and preserve `snake_case` at the API boundary. Local UI state may use camelCase.
 - Import version/provider metadata from `@srouter/constants`; do not duplicate endpoint strings or catalogs.
+- UI changes MUST load the `shadcn` skill first. Reuse installed shadcn components and variants before writing custom markup; follow its composition, form, icon, spacing, and semantic-token rules.
 - Use semantic controls, visible `focus-visible` states, `aria-label` for icon-only buttons, and minimum 44px touch targets.
 - Use semantic CSS variables from `styles.css`; no decorative gradients, glows, or unnecessary nested cards.
 - Design responsive behavior explicitly for base, `sm`, `md`, `lg`, `xl`, and `2xl`. Prevent identifier clipping and horizontal overflow.
@@ -34,7 +35,7 @@ Use this skill for `apps/web`: React routes, dashboard components, provider UI, 
 
 ## Procedure
 
-1. Inspect `git status`, route ownership, relevant hooks/components, shared types, and all usages before editing.
+1. For any UI/component task, load `shadcn` first; then inspect `git status`, route ownership, relevant hooks/components, shared types, and all usages before editing.
 2. Load the relevant reference under `references/` before changing the subsystem.
 3. Trace request payloads to the backend validator or shared schema before changing a mutation.
 4. Preserve loaded, loading, empty, and error geometry; update skeletons when layout changes.

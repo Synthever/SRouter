@@ -88,21 +88,15 @@ export function Topbar() {
             <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                 <button
                     type="button"
-                    onClick={(event) => toggleTheme(event)}
-                    className="flex items-center gap-1.5 rounded-full bg-canvas-soft hover:bg-field text-ink px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer"
+                    onClick={toggleTheme}
+                    className="flex size-8 items-center justify-center rounded-full bg-canvas-soft text-ink transition-colors hover:bg-field cursor-pointer"
                     aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
                     title={theme === "dark" ? "Light theme" : "Dark theme"}
                 >
                     {theme === "dark" ? (
-                        <>
-                            <Sun className="size-3.5" strokeWidth={2} />
-                            <span className="hidden sm:inline">Light</span>
-                        </>
+                        <Sun className="size-3.5" strokeWidth={2} />
                     ) : (
-                        <>
-                            <Moon className="size-3.5" strokeWidth={2} />
-                            <span className="hidden sm:inline">Dark</span>
-                        </>
+                        <Moon className="size-3.5" strokeWidth={2} />
                     )}
                 </button>
             </div>

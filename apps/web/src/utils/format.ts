@@ -30,6 +30,15 @@ export function formatTimeUnit(intervalMs: number): string {
     return "min";
 }
 
+export function formatTooltipTime(ms: number): string {
+    return new Date(ms).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
 export function formatDuration(ms: number): string {
     if (ms >= 1_000) {
         return `${(ms / 1_000).toLocaleString([], { maximumFractionDigits: 1 })} s`;

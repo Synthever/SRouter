@@ -143,12 +143,21 @@ export function CustomProviderDialog({ open, onOpenChange }: CustomProviderDialo
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-md w-full p-6 md:p-8 space-y-5 shadow-none font-sans bg-canvas border border-hairline-soft rounded-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
-                <div className="flex items-center justify-between border-b border-hairline-soft pb-3.5">
-                    <h2 className="font-bold text-base text-ink flex items-center gap-2">
-                        <Globe className="size-4 text-text-muted" />
-                        <span>Add Custom Provider.</span>
-                    </h2>
+            <DialogContent className="w-[calc(100%-1rem)] max-w-2xl gap-0 overflow-y-auto rounded-3xl border border-hairline-soft bg-canvas p-4 font-sans text-ink shadow-none max-h-[calc(100dvh-1rem)] sm:w-[calc(100%-2rem)] sm:p-6 md:max-h-[calc(100dvh-2rem)]">
+                <div className="flex items-start justify-between gap-4 border-b border-hairline-soft pb-4">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-canvas-soft text-text-muted">
+                            <Globe className="size-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-base font-bold tracking-tight text-ink sm:text-lg">
+                                Add custom provider
+                            </h2>
+                            <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                                Connect an OpenAI- or Anthropic-compatible endpoint.
+                            </p>
+                        </div>
+                    </div>
                     <button
                         type="button"
                         onClick={() => onOpenChange(false)}
@@ -159,11 +168,10 @@ export function CustomProviderDialog({ open, onOpenChange }: CustomProviderDialo
                     </button>
                 </div>
 
-                <DialogHeader className="p-0 space-y-1">
+                <DialogHeader className="sr-only p-0">
                     <DialogTitle className="sr-only">Add Custom Provider</DialogTitle>
                     <DialogDescription className="text-xs text-text-muted">
-                        Register any OpenAI- or Anthropic-compatible endpoint as a new provider
-                        driver. Verify the connection before saving.
+                        Verify the connection before saving.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -173,130 +181,170 @@ export function CustomProviderDialog({ open, onOpenChange }: CustomProviderDialo
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-                    <div className="space-y-1.5">
-                        <label htmlFor="cp-name" className="font-semibold text-ink block text-xs">
-                            Provider Name *
-                        </label>
-                        <input
-                            id="cp-name"
-                            type="text"
-                            placeholder="e.g. My Gateway"
-                            value={name}
-                            onChange={(e) => {
-                                setName(e.target.value);
-                                if (formError) setFormError("");
-                            }}
-                            required
-                            className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none"
-                        />
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <label htmlFor="cp-alias" className="font-semibold text-ink block text-xs">
-                            Alias (model prefix) *
-                        </label>
-                        <input
-                            id="cp-alias"
-                            type="text"
-                            placeholder="e.g. mygateway"
-                            value={alias}
-                            onChange={(e) => {
-                                setAlias(e.target.value);
-                                if (formError) setFormError("");
-                            }}
-                            className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
-                        />
-                        <p className="text-xs text-text-muted">
-                            Short prefix for model IDs (e.g.{" "}
-                            <code className="text-ink font-mono">mygateway/gpt-4</code>). 1-32
-                            chars, lowercase, numbers, hyphens, underscores.
-                        </p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <span className="font-semibold text-ink block text-xs">Protocol *</span>
-                        <div className="inline-flex gap-1 rounded-full bg-canvas-soft p-1 border border-hairline-soft">
-                            {PROTOCOLS.map((p) => (
-                                <button
-                                    key={p.value}
-                                    type="button"
-                                    onClick={() => {
-                                        setProtocol(p.value);
-                                        if (verifyStatus !== "idle") setVerifyStatus("idle");
-                                    }}
-                                    className={`rounded-full px-4 py-1.5 font-semibold transition-colors cursor-pointer text-xs ${
-                                        protocol === p.value
-                                            ? "bg-ink text-canvas shadow-none"
-                                            : "text-text-muted hover:text-ink hover:bg-canvas/50"
-                                    }`}
-                                >
-                                    {p.label}
-                                </button>
-                            ))}
+                <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-5 text-xs">
+                    <section
+                        className="flex flex-col gap-3"
+                        aria-labelledby="custom-provider-identity"
+                    >
+                        <div>
+                            <h3
+                                id="custom-provider-identity"
+                                className="text-sm font-semibold text-ink"
+                            >
+                                Provider identity
+                            </h3>
+                            <p className="mt-1 text-xs text-text-muted">
+                                Choose how this connection appears in the catalog.
+                            </p>
                         </div>
-                    </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="flex flex-col gap-1.5">
+                                <label
+                                    htmlFor="cp-name"
+                                    className="font-semibold text-ink block text-xs"
+                                >
+                                    Provider Name *
+                                </label>
+                                <input
+                                    id="cp-name"
+                                    type="text"
+                                    placeholder="e.g. My Gateway"
+                                    value={name}
+                                    onChange={(e) => {
+                                        setName(e.target.value);
+                                        if (formError) setFormError("");
+                                    }}
+                                    required
+                                    className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none"
+                                />
+                            </div>
 
-                    <div className="space-y-1.5">
-                        <label
-                            htmlFor="cp-base-url"
-                            className="font-semibold text-ink block text-xs"
-                        >
-                            Base URL *
-                        </label>
-                        <input
-                            id="cp-base-url"
-                            type="url"
-                            placeholder="https://api.example.com/v1"
-                            value={baseUrl}
-                            onChange={(e) => {
-                                setBaseUrl(e.target.value);
-                                if (formError) setFormError("");
-                                if (verifyStatus !== "idle") setVerifyStatus("idle");
-                            }}
-                            required
-                            className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
-                        />
-                    </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label
+                                    htmlFor="cp-alias"
+                                    className="font-semibold text-ink block text-xs"
+                                >
+                                    Alias (model prefix) *
+                                </label>
+                                <input
+                                    id="cp-alias"
+                                    type="text"
+                                    placeholder="e.g. mygateway"
+                                    value={alias}
+                                    onChange={(e) => {
+                                        setAlias(e.target.value);
+                                        if (formError) setFormError("");
+                                    }}
+                                    className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-text-muted">
+                            Model prefix example:{" "}
+                            <code className="text-ink font-mono">mygateway/gpt-4</code>. Use
+                            lowercase letters, numbers, hyphens, or underscores.
+                        </p>
+                    </section>
 
-                    <div className="space-y-1.5">
-                        <label
-                            htmlFor="cp-api-key"
-                            className="font-semibold text-ink block text-xs"
-                        >
-                            API Key *
-                        </label>
-                        <div className="relative">
+                    <section
+                        className="flex flex-col gap-3"
+                        aria-labelledby="custom-provider-connection"
+                    >
+                        <div>
+                            <h3
+                                id="custom-provider-connection"
+                                className="text-sm font-semibold text-ink"
+                            >
+                                Connection
+                            </h3>
+                            <p className="mt-1 text-xs text-text-muted">
+                                Set the protocol and credentials used to reach the endpoint.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <span className="block text-xs font-semibold text-ink">Protocol *</span>
+                            <div className="grid grid-cols-2 gap-1 rounded-2xl border border-hairline-soft bg-canvas-soft p-1">
+                                {PROTOCOLS.map((p) => (
+                                    <button
+                                        key={p.value}
+                                        type="button"
+                                        onClick={() => {
+                                            setProtocol(p.value);
+                                            if (verifyStatus !== "idle") setVerifyStatus("idle");
+                                        }}
+                                        className={`min-h-9 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                            protocol === p.value
+                                                ? "bg-ink text-canvas shadow-none"
+                                                : "text-text-muted hover:text-ink hover:bg-canvas/50"
+                                        }`}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label
+                                htmlFor="cp-base-url"
+                                className="font-semibold text-ink block text-xs"
+                            >
+                                Base URL *
+                            </label>
                             <input
-                                id="cp-api-key"
-                                type={showKey ? "text" : "password"}
-                                placeholder="sk-..."
-                                value={apiKey}
+                                id="cp-base-url"
+                                type="url"
+                                placeholder="https://api.example.com/v1"
+                                value={baseUrl}
                                 onChange={(e) => {
-                                    setApiKey(e.target.value);
+                                    setBaseUrl(e.target.value);
                                     if (formError) setFormError("");
                                     if (verifyStatus !== "idle") setVerifyStatus("idle");
                                 }}
                                 required
-                                className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 pr-10 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
+                                className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
                             />
-                            <button
-                                type="button"
-                                onClick={() => setShowKey(!showKey)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-ink cursor-pointer"
-                                tabIndex={-1}
-                            >
-                                <Key className="size-3.5" />
-                            </button>
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-2.5 pt-1">
+                        <div className="flex flex-col gap-1.5">
+                            <label
+                                htmlFor="cp-api-key"
+                                className="font-semibold text-ink block text-xs"
+                            >
+                                API Key *
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="cp-api-key"
+                                    type={showKey ? "text" : "password"}
+                                    placeholder="sk-..."
+                                    value={apiKey}
+                                    onChange={(e) => {
+                                        setApiKey(e.target.value);
+                                        if (formError) setFormError("");
+                                        if (verifyStatus !== "idle") setVerifyStatus("idle");
+                                    }}
+                                    required
+                                    className="w-full rounded-2xl border-0 bg-field px-4 py-2.5 pr-10 text-xs text-ink placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none shadow-none font-mono"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowKey(!showKey)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-ink cursor-pointer"
+                                    aria-label={showKey ? "Hide API key" : "Show API key"}
+                                >
+                                    <Key className="size-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div className="flex flex-col items-stretch gap-2 pt-1 sm:flex-row sm:items-center">
                         <button
                             type="button"
                             onClick={() => void handleTest()}
                             disabled={verifyStatus === "testing" || saveMutation.isPending}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-4 py-1.5 text-xs font-semibold text-ink hover:bg-canvas-soft disabled:opacity-50 transition-colors cursor-pointer bg-canvas shadow-none"
+                            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-hairline bg-canvas px-4 py-2 text-xs font-semibold text-ink shadow-none transition-colors hover:bg-canvas-soft disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer sm:min-h-9 sm:py-1.5"
                         >
                             {verifyStatus === "testing" ? (
                                 <>
@@ -318,11 +366,11 @@ export function CustomProviderDialog({ open, onOpenChange }: CustomProviderDialo
                         )}
                     </div>
 
-                    <div className="pt-3 border-t border-hairline-soft flex items-center justify-end gap-2">
+                    <div className="flex flex-col-reverse gap-2 border-t border-hairline-soft pt-4 sm:flex-row sm:items-center sm:justify-end">
                         <button
                             type="button"
                             onClick={() => onOpenChange(false)}
-                            className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink hover:bg-canvas-soft transition-colors cursor-pointer bg-canvas shadow-none"
+                            className="min-h-10 rounded-xl border border-hairline bg-canvas px-4 py-2 text-xs font-semibold text-ink shadow-none transition-colors hover:bg-canvas-soft cursor-pointer sm:min-h-9"
                         >
                             Cancel
                         </button>
@@ -334,7 +382,7 @@ export function CustomProviderDialog({ open, onOpenChange }: CustomProviderDialo
                                     ? undefined
                                     : "Test the connection successfully before saving"
                             }
-                            className="rounded-full bg-ink hover:opacity-90 text-canvas px-5 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer shadow-none"
+                            className="min-h-10 rounded-xl bg-ink px-5 py-2 text-xs font-semibold text-canvas shadow-none transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer sm:min-h-9"
                         >
                             {saveMutation.isPending ? "Saving…" : "Add Provider"}
                         </button>
