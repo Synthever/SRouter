@@ -46,3 +46,9 @@ export const ToggleRoundRobinSchema = z.object({
 });
 
 export type ToggleRoundRobinZod = z.infer<typeof ToggleRoundRobinSchema>;
+
+export const ToggleProviderSchema = z.object({
+    enabled: z.boolean()
+});
+
+export type ToggleProviderZod = z.infer<typeof ToggleProviderSchema>;

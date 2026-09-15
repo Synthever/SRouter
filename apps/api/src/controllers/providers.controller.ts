@@ -2,7 +2,13 @@ import type { Context } from "hono";
 import type { CreateProviderPayload } from "@/logic/providers.logic.js";
 import { ProvidersLogic } from "@/logic/providers.logic.js";
 import { deleteProviderDB } from "@srouter/db";
-import { AddCustomModelSchema, CreateProviderSchema, ToggleRoundRobinSchema, VerifyProviderSchema } from "@srouter/types";
+import {
+    AddCustomModelSchema,
+    CreateProviderSchema,
+    ToggleProviderSchema,
+    ToggleRoundRobinSchema,
+    VerifyProviderSchema
+} from "@srouter/types";
 import { loadSavedProvidersFromDB, registry } from "@/services/registry.js";
 import { Err, Ok } from "@/utils/response.js";
 
@@ -141,7 +147,28 @@ export class ProvidersController {
             const Result = await ProvidersLogic.SetRoundRobin(ProviderId, Parsed.data.enabled);
             return Ok(c, Result);
         } catch (error) {
-            return Err(c, error instanceof Error ? error.message : "Failed to toggle round-robin mode", 400);
+            return Err(
+                c,
+                error instanceof Error ? error.message : "Failed to toggle round-robin mode",
+                400
+            );
+        }
+    }
+
+    public static async ToggleProvider(c: Context): Promise<Response> {
+        const ProviderId = c.req.param("providerId");
+        if (!ProviderId) return Err(c, "Provider ID is required", 400);
+        const Parsed = ToggleProviderSchema.safeParse(await c.req.json().catch(() => null));
+        if (!Parsed.success)
+            return Err(c, Parsed.error.issues[0]?.message || "Invalid payload", 400);
+        try {
+            return Ok(c, await ProvidersLogic.SetProviderEnabled(ProviderId, Parsed.data.enabled));
+        } catch (error) {
+            return Err(
+                c,
+                error instanceof Error ? error.message : "Failed to toggle provider",
+                400
+            );
         }
     }
 }

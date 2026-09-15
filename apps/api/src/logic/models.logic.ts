@@ -62,6 +62,7 @@ export class ModelsLogic {
             Merged.set(M.id.toLowerCase(), M);
         }
         for (const Row of Rows) {
+            if (!registry.isProviderEnabled(Row.providerId)) continue;
             const Alias = this.AliasForProviderId(Row.providerId);
             const Id = `${Alias}/${Row.modelId}`;
             if (ProviderFilter && !Alias.toLowerCase().startsWith(ProviderFilter.toLowerCase())) {

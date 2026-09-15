@@ -23,6 +23,7 @@ import {
 import {
     deleteProviderDB,
     getAllProvidersDB,
+    getProviderEnabledDB,
     getRoundRobinDB,
     upsertProviderDB
 } from "@srouter/db";
@@ -105,6 +106,10 @@ export async function seedDefaultProviders(): Promise<void> {
 export async function loadSavedProvidersFromDB(): Promise<void> {
     const savedProviders = await getAllProvidersDB();
     for (const p of savedProviders) {
+        registry.setProviderEnabled(
+            providerBaseId(p.providerId || p.id),
+            await getProviderEnabledDB(providerBaseId(p.providerId || p.id))
+        );
         if (!p.enabled) continue;
         // Seed rows describe drivers, not connections; they never get executors.
         if (isSeedProvider(p)) continue;

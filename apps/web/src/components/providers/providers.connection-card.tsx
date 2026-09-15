@@ -19,9 +19,11 @@ interface ConnectionCardProps {
     providerName: string;
     connections: ProviderConfig[];
     roundRobin: boolean;
+    providerEnabled: boolean;
     isDeleting: boolean;
     requiresOAuth?: boolean;
     onToggleRoundRobin: (enabled: boolean) => void;
+    onToggleProvider: (enabled: boolean) => void;
     onRefresh: () => void;
     onAdd: () => void;
     onDelete: (connectionId: string) => void;
@@ -62,9 +64,11 @@ export function ConnectionCard({
     providerName,
     connections,
     roundRobin,
+    providerEnabled,
     isDeleting,
     requiresOAuth = false,
     onToggleRoundRobin,
+    onToggleProvider,
     onRefresh,
     onAdd,
     onDelete
@@ -112,6 +116,14 @@ export function ConnectionCard({
                     </div>
 
                     <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="flex items-center gap-2 rounded-full border border-hairline-soft bg-canvas-soft px-3 py-1.5 text-xs text-ink">
+                            <span className="text-xs font-medium text-ink">Provider</span>
+                            <Switch
+                                checked={providerEnabled}
+                                onCheckedChange={onToggleProvider}
+                                aria-label="Toggle provider availability"
+                            />
+                        </div>
                         <Tooltip>
                             <TooltipTrigger
                                 render={

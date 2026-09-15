@@ -92,6 +92,7 @@ export class ProviderRegistry {
     private modelsFetchTimeoutMs: number = DEFAULT_MODELS_FETCH_TIMEOUT_MS;
     private roundRobinEnabled: Map<string, boolean> = new Map();
     private roundRobinIndex: Map<string, number> = new Map();
+    private disabledProviderIds: Set<string> = new Set();
 
     constructor(
         defaultProvider?: AIProvider,
@@ -252,7 +253,7 @@ export class ProviderRegistry {
         generation: number
     ): Promise<ModelObject[]> {
         const activeProviders = Array.from(this.providers.values()).filter(
-            (provider) => provider.id !== "default"
+            (provider) => provider.id !== "default" && this.isProviderEnabled(provider.id)
         );
         const results: Array<ProviderModelResult | undefined> = new Array(activeProviders.length);
         let nextIndex = 0;
@@ -315,6 +316,17 @@ export class ProviderRegistry {
         return this.providers;
     }
 
+    setProviderEnabled(providerId: string, enabled: boolean): void {
+        const baseId = providerBaseId(providerId);
+        if (enabled) this.disabledProviderIds.delete(baseId);
+        else this.disabledProviderIds.add(baseId);
+        this.clearModelsCache();
+    }
+
+    isProviderEnabled(providerId: string): boolean {
+        return !this.disabledProviderIds.has(providerBaseId(providerId));
+    }
+
     /**
      * Live catalog derived from registered providers. One entry per base driver
      * id, collapsing multi-account connections (e.g. openai_1700000000 → openai).
@@ -324,7 +336,7 @@ export class ProviderRegistry {
         const catalog: ProviderDefinition[] = [];
 
         for (const provider of this.providers.values()) {
-            if (provider.id === "default") continue;
+            if (provider.id === "default" || !this.isProviderEnabled(provider.id)) continue;
             const baseId = providerBaseId(provider.id);
             if (seen.has(baseId)) continue;
             seen.add(baseId);
@@ -352,7 +364,7 @@ export class ProviderRegistry {
         const candidates: AIProvider[] = [];
         // 1. Direct match from registered providers' listModels() (cached)
         const activeProviders = Array.from(this.providers.values()).filter(
-            (p) => p.id !== "default"
+            (p) => p.id !== "default" && this.isProviderEnabled(p.id)
         );
 
         const modelLists = await Promise.all(
@@ -402,7 +414,7 @@ export class ProviderRegistry {
                 } else {
                     const targetBaseId = providerTypeForAlias(prefix) ?? prefix;
                     for (const [id, provider] of this.providers.entries()) {
-                        if (id === "default") continue;
+                        if (id === "default" || !this.isProviderEnabled(id)) continue;
                         const baseId = providerBaseId(id);
                         const alias = providerAliasFor(provider);
                         if (
