@@ -23,7 +23,9 @@ import {
     addHiddenModelDB,
     deleteHiddenModelDB,
     getRoundRobinDB,
+    getProviderEnabledDB,
     setRoundRobinDB,
+    setProviderEnabledDB,
     upsertProviderDB
 } from "@srouter/db";
 import { loadSavedProvidersFromDB, registry } from "@/services/registry.js";
@@ -120,6 +122,7 @@ async function CatalogWithSavedProviders(): Promise<ProviderDefinition[]> {
             requires_oauth: Seed?.requires_oauth,
             supports_custom_url: Seed ? (Seed.supports_custom_url ?? true) : true,
             roundRobin: await getRoundRobinDB(BaseId),
+            enabled: await getProviderEnabledDB(BaseId),
             status: {
                 state: ConnectedCount > 0 ? "connected" : "no_connections",
                 message: Seed?.status_message,
@@ -143,6 +146,7 @@ async function CatalogWithSavedProviders(): Promise<ProviderDefinition[]> {
             requires_oauth: Seed.requires_oauth,
             supports_custom_url: Seed.supports_custom_url ?? true,
             roundRobin: await getRoundRobinDB(Seed.id),
+            enabled: await getProviderEnabledDB(Seed.id),
             status: {
                 state: "no_connections",
                 message: Seed.status_message,
@@ -195,9 +199,10 @@ export class ProvidersLogic {
         let LiveModels = Provider.models;
         const MatchingProviders = Array.from(registry.getAllProviders().values()).filter(
             (P) =>
-                P.id === ProviderId ||
-                P.id.startsWith(`${ProviderId}_`) ||
-                P.id.startsWith(`${ProviderId}-`)
+                registry.isProviderEnabled(P.id) &&
+                (P.id === ProviderId ||
+                    P.id.startsWith(`${ProviderId}_`) ||
+                    P.id.startsWith(`${ProviderId}-`))
         );
 
         if (MatchingProviders.length > 0) {
@@ -365,6 +370,23 @@ export class ProvidersLogic {
         const Provider = await ProvidersLogic.GetProviderById(Id);
         if (!Provider) throw new Error(`Provider '${ProviderId}' not found`);
         return Provider;
+    }
+
+    public static async SetProviderEnabled(
+        ProviderId: string,
+        Enabled: boolean
+    ): Promise<ProviderDefinition> {
+        const Id = ProviderId.toLowerCase();
+        const Exists =
+            DEFAULT_PROVIDER_MAP[Id] !== undefined ||
+            (await getAllProvidersDB()).some((P) => BaseIdOf(P.providerId || P.id) === Id);
+        if (!Exists) throw new Error(`Provider '${ProviderId}' not found`);
+
+        await setProviderEnabledDB(Id, Enabled);
+        registry.setProviderEnabled(Id, Enabled);
+        const Provider = await ProvidersLogic.GetProviderById(Id);
+        if (!Provider) throw new Error(`Provider '${ProviderId}' not found`);
+        return { ...Provider, enabled: Enabled };
     }
 
     public static async ListCustomModels(ProviderId: string): Promise<ModelObject[]> {

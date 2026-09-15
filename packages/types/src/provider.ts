@@ -5,10 +5,7 @@ import type {
     ModelObject
 } from "./openai.js";
 import type { RequestAttemptBudget } from "./attemptBudget.js";
-import type {
-    ImageGenerationRequest,
-    ImageGenerationResponse
-} from "./images.js";
+import type { ImageGenerationRequest, ImageGenerationResponse } from "./images.js";
 
 // --- Provider Spectrum & Catalog Types ---
 export type ProviderCategory = "oauth" | "free_tier" | "api_key" | "custom_provider";
@@ -37,6 +34,7 @@ export interface ProviderDefinition {
     requires_oauth?: boolean;
     supports_custom_url?: boolean;
     roundRobin?: boolean;
+    enabled?: boolean;
     status: ProviderStatus;
     models: ModelObject[];
     connections?: ProviderConfig[];

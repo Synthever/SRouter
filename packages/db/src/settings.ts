@@ -14,15 +14,19 @@ export async function getSettingDB(key: string, defaultValue = ""): Promise<stri
 }
 
 export async function setSettingDB(key: string, value: string): Promise<void> {
-    await db.prepare(
-        `INSERT INTO system_settings (key, value)
+    await db
+        .prepare(
+            `INSERT INTO system_settings (key, value)
          VALUES (?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-    ).run(key, value);
+        )
+        .run(key, value);
 }
 
 export async function getAllSettingsDB(): Promise<Record<string, string>> {
-    const Rows = (await db.prepare("SELECT key, value FROM system_settings").all()) as unknown as SettingRow[];
+    const Rows = (await db
+        .prepare("SELECT key, value FROM system_settings")
+        .all()) as unknown as SettingRow[];
     const Result: Record<string, string> = {};
     for (const r of Rows) {
         Result[r.key] = r.value;
@@ -45,4 +49,12 @@ export async function getRoundRobinDB(providerId: string): Promise<boolean> {
 
 export async function setRoundRobinDB(providerId: string, enabled: boolean): Promise<void> {
     await setSettingDB(`round_robin_${providerId}`, enabled ? "true" : "false");
+}
+
+export async function getProviderEnabledDB(providerId: string): Promise<boolean> {
+    return (await getSettingDB(`provider_enabled_${providerId}`, "true")) !== "false";
+}
+
+export async function setProviderEnabledDB(providerId: string, enabled: boolean): Promise<void> {
+    await setSettingDB(`provider_enabled_${providerId}`, enabled ? "true" : "false");
 }

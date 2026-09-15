@@ -102,6 +102,18 @@ export function useProvider(providerId: string) {
         }
     });
 
+    const toggleProviderMutation = useMutation({
+        mutationFn: (enabled: boolean) =>
+            api.patch<ProviderDefinition>(`/v1/providers/${providerId}/enabled`, { enabled }),
+        onSuccess: (data) => {
+            void queryClient.invalidateQueries({ queryKey: ["providers", providerId] });
+            void queryClient.invalidateQueries({ queryKey: ["providers", "catalog"] });
+            void queryClient.invalidateQueries({ queryKey: ["models"] });
+            toast.success(data.enabled ? "Provider enabled" : "Provider disabled");
+        },
+        onError: (err: Error) => toast.error(err.message || "Failed to toggle provider")
+    });
+
     const addModelMutation = useMutation({
         mutationFn: (modelId: string) =>
             api.post<ModelObject>(`/v1/providers/${providerId}/models`, { model_id: modelId }),
@@ -158,6 +170,7 @@ export function useProvider(providerId: string) {
         addMutation,
         deleteMutation,
         toggleRoundRobinMutation,
+        toggleProviderMutation,
         addModelMutation,
         deleteModelMutation,
         hideModelMutation,

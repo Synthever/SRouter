@@ -53,6 +53,7 @@ function ProviderDetailPage() {
         addMutation,
         deleteMutation,
         toggleRoundRobinMutation,
+        toggleProviderMutation,
         addModelMutation,
         deleteModelMutation,
         hiddenModelIds,
@@ -307,9 +308,11 @@ function ProviderDetailPage() {
                 providerName={provider.name}
                 connections={connections}
                 roundRobin={provider.roundRobin ?? false}
+                providerEnabled={provider.enabled ?? true}
                 isDeleting={deleteMutation.isPending}
                 requiresOAuth={provider.requires_oauth}
                 onToggleRoundRobin={(enabled) => toggleRoundRobinMutation.mutate(enabled)}
+                onToggleProvider={(enabled) => toggleProviderMutation.mutate(enabled)}
                 onRefresh={() => void refetch()}
                 onAdd={handleAddConnection}
                 onDelete={(connectionId) => deleteMutation.mutate(connectionId)}

@@ -37,9 +37,22 @@ ProvidersRouter.patch(
     RequireAdmin,
     ProvidersController.ToggleRoundRobin
 );
+ProvidersRouter.patch(
+    "/providers/:providerId/enabled",
+    RequireAdmin,
+    ProvidersController.ToggleProvider
+);
 
-ProvidersRouter.get("/providers/:providerId/hidden-models", ApiKeyAuth, ProvidersController.ListHiddenModels);
-ProvidersRouter.post("/providers/:providerId/hidden-models", RequireAdmin, ProvidersController.HideModel);
+ProvidersRouter.get(
+    "/providers/:providerId/hidden-models",
+    ApiKeyAuth,
+    ProvidersController.ListHiddenModels
+);
+ProvidersRouter.post(
+    "/providers/:providerId/hidden-models",
+    RequireAdmin,
+    ProvidersController.HideModel
+);
 ProvidersRouter.delete(
     "/providers/:providerId/hidden-models/:modelId{.+}",
     RequireAdmin,
