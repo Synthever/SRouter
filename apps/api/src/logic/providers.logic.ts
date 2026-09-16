@@ -384,6 +384,11 @@ export class ProvidersLogic {
 
         await setProviderEnabledDB(Id, Enabled);
         registry.setProviderEnabled(Id, Enabled);
+        if (Enabled) {
+            // Re-register the saved executor after re-enabling so model discovery
+            // cannot remain bound to a stale runtime registry state.
+            await loadSavedProvidersFromDB();
+        }
         const Provider = await ProvidersLogic.GetProviderById(Id);
         if (!Provider) throw new Error(`Provider '${ProviderId}' not found`);
         return { ...Provider, enabled: Enabled };

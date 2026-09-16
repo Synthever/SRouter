@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, Layers } from "lucide-react";
 import type { ProviderDefinition } from "@srouter/types";
 import { ProviderIcon } from "@/components/providers";
-import { getConnectedCount } from "@/utils/provider.utils";
+import { getConnectedCount, isProviderEnabled } from "@/utils/provider.utils";
 
 const protocolLabels: Record<string, string> = {
     openai: "OpenAI v1",
@@ -20,6 +20,7 @@ function authLabel(provider: ProviderDefinition): string {
 export function ProviderRow({ provider }: { provider: ProviderDefinition }) {
     const connectedCount = getConnectedCount(provider);
     const isConnected = connectedCount > 0;
+    const isEnabled = isProviderEnabled(provider);
     const modelCount = provider.models?.length ?? 0;
 
     return (
@@ -39,7 +40,12 @@ export function ProviderRow({ provider }: { provider: ProviderDefinition }) {
                             {provider.name}
                         </span>
 
-                        {isConnected ? (
+                        {!isEnabled ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas-soft px-2 py-0.5 text-xs font-medium text-text-muted">
+                                <span className="size-1.5 rounded-full bg-text-muted/40" />
+                                <span>Disabled</span>
+                            </span>
+                        ) : isConnected ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                                 <span className="size-1.5 rounded-full bg-emerald-500" />
                                 <span>{connectedCount} live</span>

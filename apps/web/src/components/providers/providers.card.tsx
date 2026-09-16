@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import type { ProviderDefinition } from "@srouter/types";
 import { ProviderIcon } from "@/components/providers";
-import { getConnectedCount } from "@/utils/provider.utils";
+import { getConnectedCount, isProviderEnabled } from "@/utils/provider.utils";
 
 export function ProviderCard({ provider }: { provider: ProviderDefinition }) {
     const connectedCount = getConnectedCount(provider);
     const isConnected = connectedCount > 0;
+    const isEnabled = isProviderEnabled(provider);
 
     return (
         <Link
@@ -31,7 +32,12 @@ export function ProviderCard({ provider }: { provider: ProviderDefinition }) {
                         </div>
                     </div>
                     <div className="shrink-0 flex items-center">
-                        {isConnected ? (
+                        {!isEnabled ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas-soft px-2.5 py-0.5 text-xs text-text-muted font-medium">
+                                <span className="size-1.5 rounded-full bg-text-muted/40" />
+                                <span>Disabled</span>
+                            </span>
+                        ) : isConnected ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                                 <span className="size-1.5 rounded-full bg-emerald-500" />
                                 <span>{connectedCount} live</span>
