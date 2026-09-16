@@ -1,16 +1,18 @@
 import type {
     ChatCompletionChunk,
+    ChatCompletionChunkDelta,
     ChatCompletionRequest,
     ChatCompletionResponse,
     JSONObject,
-    JSONValue
+    JSONValue,
+    ToolCall
 } from "@srouter/types";
 import crypto from "node:crypto";
 
 export interface GeminiFunctionCall {
+    id?: string;
     name: string;
     args?: JSONObject;
-    thoughtSignature?: string;
     thought_signature?: string;
 }
 
@@ -29,7 +31,6 @@ export interface GeminiContentPart {
     functionCall?: GeminiFunctionCall;
     functionResponse?: GeminiFunctionResponse;
     thought?: boolean;
-    thoughtSignature?: string;
     thought_signature?: string;
     inlineData?: GeminiInlineData;
 }
@@ -37,6 +38,46 @@ export interface GeminiContentPart {
 export interface GeminiContent {
     role: string;
     parts: GeminiContentPart[];
+}
+
+interface AntigravityToolCall extends ToolCall {
+    thought_signature?: string;
+}
+
+interface AntigravityMessageMetadata {
+    thought_signature?: string;
+    function_call?: {
+        name?: string;
+        arguments?: string;
+        thought_signature?: string;
+    };
+}
+
+interface AntigravityToolDeclaration {
+    name: string;
+    description: string;
+    parameters: JSONValue;
+}
+
+interface AntigravityToolsPayload {
+    functionDeclarations: AntigravityToolDeclaration[];
+}
+
+interface AntigravityImageDelta {
+    type: "image_url";
+    image_url: { url: string };
+}
+
+type AntigravityChunkDelta = ChatCompletionChunkDelta & {
+    images?: AntigravityImageDelta[];
+};
+
+function getAntigravityToolCall(tool_call: ToolCall): AntigravityToolCall {
+    return tool_call as AntigravityToolCall;
+}
+
+function getAntigravityMessageMetadata(message: object): AntigravityMessageMetadata {
+    return message as AntigravityMessageMetadata;
 }
 
 export interface CloudCodePayload {
@@ -633,7 +674,7 @@ function geminiChunkMeta(state: GeminiStreamState) {
 
 function buildGeminiChunk(
     state: GeminiStreamState,
-    delta: Record<string, unknown>,
+    delta: AntigravityChunkDelta,
     finishReason: string | null
 ): ChatCompletionChunk {
     return {
@@ -644,7 +685,7 @@ function buildGeminiChunk(
         choices: [
             {
                 index: 0,
-                delta: delta as ChatCompletionChunk["choices"][0]["delta"],
+                delta,
                 finish_reason: finishReason as ChatCompletionChunk["choices"][0]["finish_reason"]
             }
         ]
@@ -655,18 +696,17 @@ function emitGeminiFunctionCall(
     functionCall: {
         name: string;
         args?: Record<string, unknown>;
-        thoughtSignature?: string;
         thought_signature?: string;
     },
     state: GeminiStreamState,
-    thoughtSignature?: string
+    thought_signature?: string
 ): ChatCompletionChunk {
     const rawName = functionCall.name;
     const fcName = state.toolNameMap?.get(rawName) || rawName;
     const fcArgs = stripZeroWidth(functionCall.args || {});
     const toolCallIndex = state.functionIndex++;
     state.geminiToolCallCount++;
-    const sig = thoughtSignature || functionCall.thoughtSignature || functionCall.thought_signature;
+    const sig = thought_signature || functionCall.thought_signature;
     return buildGeminiChunk(
         state,
         {
@@ -676,7 +716,7 @@ function emitGeminiFunctionCall(
                     id: `${fcName}-${Date.now()}-${toolCallIndex}`,
                     type: "function",
                     function: { name: fcName, arguments: JSON.stringify(fcArgs) },
-                    ...(sig ? { thought_signature: sig, thoughtSignature: sig } : {})
+                    ...(sig ? { thought_signature: sig } : {})
                 }
             ]
         },
@@ -714,9 +754,9 @@ export function geminiStreamToOpenAIChunks(
         for (const part of content.parts) {
             const partAny = part as unknown as Record<string, unknown>;
             const fcAny = part.functionCall as Record<string, unknown> | undefined;
-            const thoughtSig = (part.thoughtSignature ||
+            const thoughtSig = (part.thought_signature ||
                 partAny.thought_signature ||
-                fcAny?.thoughtSignature ||
+                fcAny?.thought_signature ||
                 fcAny?.thought_signature) as string | undefined;
             const hasThoughtSig = Boolean(thoughtSig);
             const isThought = part.thought === true;
@@ -1062,7 +1102,9 @@ async function resolveImageInlineData(url: string): Promise<GeminiInlineData | n
 /**
  * Build Antigravity Gemini contents from ChatCompletionRequest messages, mapping tools.
  */
-export async function buildAntigravityContentsAsync(req: ChatCompletionRequest): Promise<GeminiContent[]> {
+export async function buildAntigravityContentsAsync(
+    req: ChatCompletionRequest
+): Promise<GeminiContent[]> {
     const rawContents: GeminiContent[] = [];
 
     // Map tool_call_id to function name
@@ -1096,30 +1138,27 @@ export async function buildAntigravityContentsAsync(req: ChatCompletionRequest):
                     args = { raw: tc.function.arguments || "" };
                 }
                 const name = sanitizeFunctionName(tc.function.name);
-                const rawTc = tc as unknown as Record<string, unknown>;
-                const rawMsg = m as unknown as Record<string, unknown>;
-                const thoughtSignature =
-                    (rawTc.thoughtSignature as string) ||
+                const rawTc = getAntigravityToolCall(tc);
+                const rawMsg = getAntigravityMessageMetadata(m);
+                const thought_signature =
                     (rawTc.thought_signature as string) ||
-                    (rawMsg.thoughtSignature as string) ||
                     (rawMsg.thought_signature as string) ||
                     "skip_thought_signature_validator";
 
                 parts.push({
                     functionCall: { name, args },
-                    thoughtSignature
+                    thought_signature
                 });
             }
         } else if (
             m.role === "assistant" &&
-            (m as unknown as Record<string, unknown>).function_call &&
+            getAntigravityMessageMetadata(m).function_call &&
             (!Array.isArray(m.tool_calls) || m.tool_calls.length === 0)
         ) {
-            const rawM = m as unknown as Record<string, unknown>;
+            const rawM = getAntigravityMessageMetadata(m);
             const legacyFunctionCall = rawM.function_call as {
                 name?: string;
                 arguments?: string;
-                thoughtSignature?: string;
                 thought_signature?: string;
             };
             let text = typeof m.content === "string" ? m.content.trim() : "";
@@ -1136,16 +1175,14 @@ export async function buildAntigravityContentsAsync(req: ChatCompletionRequest):
                 args = { raw: legacyFunctionCall.arguments || "" };
             }
             const name = sanitizeFunctionName(legacyFunctionCall.name || "");
-            const thoughtSignature =
-                legacyFunctionCall.thoughtSignature ||
+            const thought_signature =
                 legacyFunctionCall.thought_signature ||
-                (rawM.thoughtSignature as string) ||
                 (rawM.thought_signature as string) ||
                 "skip_thought_signature_validator";
 
             parts.push({
                 functionCall: { name, args },
-                thoughtSignature
+                thought_signature
             });
         } else if (m.role === "tool") {
             const rawName =
@@ -1258,30 +1295,27 @@ export function buildAntigravityContents(req: ChatCompletionRequest): GeminiCont
                     args = { raw: tc.function.arguments || "" };
                 }
                 const name = sanitizeFunctionName(tc.function.name);
-                const rawTc = tc as unknown as Record<string, unknown>;
-                const rawMsg = m as unknown as Record<string, unknown>;
-                const thoughtSignature =
-                    (rawTc.thoughtSignature as string) ||
+                const rawTc = getAntigravityToolCall(tc);
+                const rawMsg = getAntigravityMessageMetadata(m);
+                const thought_signature =
                     (rawTc.thought_signature as string) ||
-                    (rawMsg.thoughtSignature as string) ||
                     (rawMsg.thought_signature as string) ||
                     "skip_thought_signature_validator";
 
                 parts.push({
                     functionCall: { name, args },
-                    thoughtSignature
+                    thought_signature
                 });
             }
         } else if (
             m.role === "assistant" &&
-            (m as unknown as Record<string, unknown>).function_call &&
+            getAntigravityMessageMetadata(m).function_call &&
             (!Array.isArray(m.tool_calls) || m.tool_calls.length === 0)
         ) {
-            const rawM = m as unknown as Record<string, unknown>;
+            const rawM = getAntigravityMessageMetadata(m);
             const legacyFunctionCall = rawM.function_call as {
                 name?: string;
                 arguments?: string;
-                thoughtSignature?: string;
                 thought_signature?: string;
             };
             let text = typeof m.content === "string" ? m.content.trim() : "";
@@ -1298,16 +1332,14 @@ export function buildAntigravityContents(req: ChatCompletionRequest): GeminiCont
                 args = { raw: legacyFunctionCall.arguments || "" };
             }
             const name = sanitizeFunctionName(legacyFunctionCall.name || "");
-            const thoughtSignature =
-                legacyFunctionCall.thoughtSignature ||
+            const thought_signature =
                 legacyFunctionCall.thought_signature ||
-                (rawM.thoughtSignature as string) ||
                 (rawM.thought_signature as string) ||
                 "skip_thought_signature_validator";
 
             parts.push({
                 functionCall: { name, args },
-                thoughtSignature
+                thought_signature
             });
         } else if (m.role === "tool") {
             const rawName =

@@ -261,10 +261,10 @@ test("buildAntigravityContents injects skip_thought_signature_validator when mis
     const modelPart = contents[1]?.parts[0];
     assert.ok(modelPart?.functionCall);
     assert.equal(modelPart.functionCall.name, "default_api:bash");
-    assert.equal(modelPart.thoughtSignature, "skip_thought_signature_validator");
+    assert.equal(modelPart.thought_signature, "skip_thought_signature_validator");
 });
 
-test("buildAntigravityContents preserves existing thoughtSignature", () => {
+test("buildAntigravityContents preserves existing thought_signature", () => {
     const req: ChatCompletionRequest = {
         model: "antigravity/gemini-3.7-flash-high",
         messages: [
@@ -280,7 +280,7 @@ test("buildAntigravityContents preserves existing thoughtSignature", () => {
                             name: "default_api:bash",
                             arguments: JSON.stringify({ command: "pwd" })
                         },
-                        thoughtSignature: "real_encrypted_signature_blob"
+                        thought_signature: "real_encrypted_signature_blob"
                     } as unknown as ChatCompletionRequest["messages"][0]["tool_calls"][0]
                 ]
             },
@@ -295,7 +295,7 @@ test("buildAntigravityContents preserves existing thoughtSignature", () => {
     const contents = buildAntigravityContents(req);
     const modelPart = contents[1]?.parts[0];
     assert.ok(modelPart?.functionCall);
-    assert.equal(modelPart.thoughtSignature, "real_encrypted_signature_blob");
+    assert.equal(modelPart.thought_signature, "real_encrypted_signature_blob");
 });
 
 test("buildAntigravityContents converts base64 image_url to inlineData", () => {
@@ -328,7 +328,7 @@ test("buildAntigravityContents converts base64 image_url to inlineData", () => {
     });
 });
 
-test("geminiStreamToOpenAIChunks propagates thoughtSignature in tool calls", () => {
+test("geminiStreamToOpenAIChunks propagates thought_signature in tool calls", () => {
     const state = createGeminiStreamState("gemini-3.7-flash-high");
     const rawChunk = {
         response: {
@@ -341,7 +341,7 @@ test("geminiStreamToOpenAIChunks propagates thoughtSignature in tool calls", () 
                                     name: "default_api_bash",
                                     args: { command: "uptime" }
                                 },
-                                thoughtSignature: "sig_12345"
+                                thought_signature: "sig_12345"
                             }
                         ],
                         role: "model"
@@ -357,7 +357,7 @@ test("geminiStreamToOpenAIChunks propagates thoughtSignature in tool calls", () 
     assert.ok(tcChunk);
     const tc = tcChunk.choices[0]?.delta.tool_calls?.[0] as unknown as Record<string, unknown>;
     assert.ok(tc);
-    assert.equal(tc.thoughtSignature, "sig_12345");
+    assert.equal(tc.thought_signature, "sig_12345");
     assert.equal(tc.thought_signature, "sig_12345");
 });
 
