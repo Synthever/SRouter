@@ -1,5 +1,6 @@
 import { ANTHROPIC_PROVIDER } from "./anthropic.js";
 import { ANTIGRAVITY_PROVIDER } from "./antigravity.js";
+import { ATRIA_PROVIDER } from "./atria.js";
 import { BLUESMINDS_PROVIDER } from "./bluesminds.js";
 import { CODEBUDDY_CN_PROVIDER, CODEBUDDY_PROVIDER } from "./codebuddy.js";
 import { CLINE_PROVIDER } from "./cline.js";
@@ -37,7 +38,8 @@ export const KNOWN_PROVIDERS = [
     BAI_PROVIDER,
     EXPERIENTIALLABS_PROVIDER,
     MINIMAX_PROVIDER,
-    CLINE_PROVIDER
+    CLINE_PROVIDER,
+    ATRIA_PROVIDER
 ] as const satisfies readonly ProviderMetadata[];
 
 export const KNOWN_PROVIDER_MAP = Object.freeze(

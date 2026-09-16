@@ -11,6 +11,7 @@ export * from "./commandcode.js";
 export * from "./openai.js";
 export * from "./anthropic.js";
 export * from "./antigravity.js";
+export * from "./atria.js";
 export * from "./codebuddy.js";
 export * from "./qoder.js";
 export * from "./opencode.js";

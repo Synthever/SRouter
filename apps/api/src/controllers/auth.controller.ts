@@ -145,6 +145,15 @@ export const AuthController = {
             )
     },
 
+    Atria: {
+        ImportToken: (c: Context): Promise<Response> =>
+            ImportTokenFor(
+                AuthHandlers.Atria,
+                (b) => AuthLogic.processProviderTokenImport("atria", b),
+                c
+            )
+    },
+
     Claude: {
         OAuth: async (c: Context): Promise<Response> =>
             OAuthFor(
