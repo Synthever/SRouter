@@ -520,7 +520,8 @@ for (const [key, handler] of [
     ["bluesminds", AuthHandlers.BluesMinds],
     ["seekai", AuthHandlers.SeekAI],
     ["tabitoken", AuthHandlers.TabiToken],
-    ["tokenrouter", AuthHandlers.TokenRouter]
+    ["tokenrouter", AuthHandlers.TokenRouter],
+    ["atria", AuthHandlers.Atria]
 ] as const) {
     RegisterEntry(key, {
         importToken: (params) => ProcessTokenImportFor(handler, params)

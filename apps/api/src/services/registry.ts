@@ -1,4 +1,5 @@
 import {
+    ATRIA_BASE_URL,
     BAI_BASE_URL,
     BLUESMINDS_BASE_URL,
     CODEBUDDY_BASE_URL,
@@ -30,6 +31,7 @@ import {
 import {
     AntigravityExecutor,
     AnthropicExecutor,
+    AtriaExecutor,
     BAIExecutor,
     BluesMindsExecutor,
     CodeBuddyExecutor,
@@ -291,6 +293,17 @@ export async function loadSavedProvidersFromDB(): Promise<void> {
                         accessToken: p.accessToken,
                         refreshToken: p.refreshToken,
                         providerSpecificData: p.providerSpecificData
+                    })
+                );
+                break;
+            case isProviderBaseId(p.id, "atria"):
+                registry.registerProvider(
+                    new AtriaExecutor({
+                        id: p.id || p.providerId,
+                        name: p.name,
+                        baseUrl: baseUrl || ATRIA_BASE_URL,
+                        apiKey: p.apiKey,
+                        accessToken: p.accessToken
                     })
                 );
                 break;

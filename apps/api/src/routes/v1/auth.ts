@@ -18,6 +18,8 @@ AuthRouter.post("/auth/commandcode/token", RequireAdmin, AuthController.CommandC
 
 AuthRouter.post("/auth/anthropic/token", RequireAdmin, AuthController.Anthropic.ImportToken);
 
+AuthRouter.post("/auth/atria/token", RequireAdmin, AuthController.Atria.ImportToken);
+
 AuthRouter.get("/auth/claude/login", RequireAdmin, AuthController.Claude.OAuth);
 AuthRouter.get("/auth/claude/callback", AuthController.Claude.Callback);
 AuthRouter.post("/auth/claude/callback", AuthController.Claude.Callback);

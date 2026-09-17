@@ -3,6 +3,7 @@ import {
     ANTIGRAVITY_OAUTH_CLIENT_ID,
     ANTIGRAVITY_OAUTH_REDIRECT_URI,
     ANTHROPIC_BASE_URL,
+    ATRIA_BASE_URL,
     BAI_BASE_URL,
     BLUESMINDS_BASE_URL,
     CODEBUDDY_BASE_URL,
@@ -20,6 +21,7 @@ import {
 import {
     AntigravityExecutor,
     AnthropicExecutor,
+    AtriaExecutor,
     BAIExecutor,
     BluesMindsExecutor,
     CodeBuddyExecutor,
@@ -111,6 +113,24 @@ const commandCode: AuthProviderHandler = {
     }),
     buildExecutor: ({ id, name, baseUrl, apiKey }) =>
         new CommandCodeExecutor({ id, name, baseUrl, apiKey })
+};
+
+const atria: AuthProviderHandler = {
+    providerId: "atria",
+    displayName: "Atria",
+    category: "api_key",
+    protocol: "openai",
+    idPrefix: "atria",
+    baseUrl: () => ATRIA_BASE_URL,
+    oauthSuccessMessage: "",
+    tokenImportMessage: "Atria API Key registered and saved directly to SQLite database!",
+    mapImportTokens: (params) => ({
+        apiKey: params.access_token ?? params.accessToken,
+        refreshToken: params.refreshToken,
+        baseUrl: params.baseUrl
+    }),
+    buildExecutor: ({ id, name, baseUrl, apiKey }) =>
+        new AtriaExecutor({ id, name, baseUrl: baseUrl || ATRIA_BASE_URL, apiKey })
 };
 
 const anthropic: AuthProviderHandler = {
@@ -350,6 +370,7 @@ export const AuthHandlers = {
     Antigravity: antigravity,
     CommandCode: commandCode,
     Anthropic: anthropic,
+    Atria: atria,
     Claude: claude,
     Qoder: qoder,
     GoRouter: goRouter,
@@ -367,6 +388,7 @@ export const authProviderHandlers: Record<string, AuthProviderHandler> = {
     antigravity: AuthHandlers.Antigravity,
     commandcode: AuthHandlers.CommandCode,
     anthropic: AuthHandlers.Anthropic,
+    atria: AuthHandlers.Atria,
     claude: AuthHandlers.Claude,
     qoder: AuthHandlers.Qoder,
     gorouter: AuthHandlers.GoRouter,

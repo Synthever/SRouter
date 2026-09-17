@@ -14,6 +14,7 @@ const ICON_MAPPING: Record<string, string> = {
     anthropic: "/icons/providers/anthropic.svg",
     claude: "/icons/providers/claude.png",
     antigravity: "/icons/providers/antigravity.png",
+    atria: "/icons/providers/atria.svg",
     neosantara: "/icons/providers/neosantara.png",
     gorouter: "/icons/providers/newapi.png",
     newapi: "/icons/providers/newapi.png",
