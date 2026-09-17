@@ -1,8 +1,46 @@
 import { randomUUID } from "node:crypto";
 import { CLINE_BASE_URL } from "@srouter/constants";
+import { DescribeErrorPayload, type UpstreamErrorPayload } from "./base.js";
 import { OpenAIExecutor, type OpenAIExecutorOptions } from "./openai.js";
 
 export interface ClineExecutorOptions extends OpenAIExecutorOptions {}
+
+/** Successful hosted API payloads arrive wrapped as `{ data, success: true }`. */
+export interface ClineSuccessEnvelope<T> {
+    data: T;
+    success: true;
+}
+
+/** Rejected payloads arrive as `{ success: false }` plus the upstream error. */
+export interface ClineErrorEnvelope {
+    data?: UpstreamErrorPayload | null;
+    success: false;
+    error?: UpstreamErrorPayload;
+}
+
+/** A non-streaming payload is either bare or wrapped by the hosted API. */
+export type ClineResponsePayload<T> = T | ClineSuccessEnvelope<T> | ClineErrorEnvelope;
+
+function IsClineEnvelope<T extends object>(
+    payload: ClineResponsePayload<T>
+): payload is ClineSuccessEnvelope<T> | ClineErrorEnvelope {
+    if (typeof payload !== "object" || payload === null) return false;
+    const candidate = payload as ClineSuccessEnvelope<T> | ClineErrorEnvelope;
+    return "success" in candidate && typeof candidate.success === "boolean";
+}
+
+/**
+ * The hosted Cline API answers non-streaming requests with a `{ data, success }`
+ * envelope (`{"data":{"choices":[...]},"success":true}`) while its SSE frames
+ * stay unwrapped. Every consumer downstream — the chat route, the Anthropic
+ * `/v1/messages` translator, usage accounting — expects the bare OpenAI payload,
+ * so unwrap the envelope here.
+ */
+export function UnwrapClineEnvelope<T extends object>(payload: ClineResponsePayload<T>): T {
+    if (!IsClineEnvelope(payload)) return payload;
+    if (payload.success) return payload.data;
+    throw new Error(`Cline Provider Error: ${DescribeErrorPayload(payload.error ?? payload.data)}`);
+}
 
 export class ClineExecutor extends OpenAIExecutor {
     constructor(options: ClineExecutorOptions = {}) {
@@ -25,5 +63,9 @@ export class ClineExecutor extends OpenAIExecutor {
                 "X-Task-ID": randomUUID()
             }
         });
+    }
+
+    protected NormalizeResponsePayload<T extends object>(payload: ClineResponsePayload<T>): T {
+        return UnwrapClineEnvelope<T>(payload);
     }
 }

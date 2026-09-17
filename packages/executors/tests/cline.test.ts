@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import type { ChatCompletionRequest } from "@srouter/types";
+import type { ChatCompletionChunk, ChatCompletionRequest } from "@srouter/types";
 import { ClineExecutor } from "../src/cline.js";
 
 const originalFetch = globalThis.fetch;
@@ -37,4 +37,100 @@ test("Cline sends hosted API headers and keeps the provider/model namespace", as
     assert.match(requestHeaders?.get("x-task-id") ?? "", /^[0-9a-f-]{36}$/);
     assert.equal(requestBody?.model, "deepseek/deepseek-v4.1-flash");
     assert.equal(requestBody?.stream, false);
+});
+
+test("Cline unwraps the hosted { data, success } envelope on non-streaming responses", async () => {
+    globalThis.fetch = async () =>
+        Response.json({
+            data: {
+                id: "gen_01M2Q0TFDRACJFV1QR2KXE425Y",
+                object: "chat.completion",
+                created: 1789626499,
+                model: "deepseek/deepseek-v4.1-flash",
+                choices: [
+                    {
+                        index: 0,
+                        finish_reason: "stop",
+                        message: { role: "assistant", content: "OK" }
+                    }
+                ],
+                usage: { prompt_tokens: 141, completion_tokens: 18, total_tokens: 159 }
+            },
+            success: true
+        });
+
+    const response = await new ClineExecutor({ apiKey: "cline_fixture_key" }).chatCompletion({
+        model: "cline/deepseek/deepseek-v4.1-flash",
+        messages: [{ role: "user", content: "Reply with exactly OK" }]
+    } as ChatCompletionRequest);
+
+    assert.equal(response.choices[0]?.message.content, "OK");
+    assert.equal(response.usage?.total_tokens, 159);
+});
+
+test("Cline leaves a plain OpenAI payload untouched", async () => {
+    const plain = {
+        id: "chatcmpl_test",
+        object: "chat.completion",
+        created: 1789626499,
+        model: "deepseek/deepseek-v4.1-flash",
+        choices: [
+            {
+                index: 0,
+                finish_reason: "stop",
+                message: { role: "assistant", content: "plain" }
+            }
+        ]
+    };
+    globalThis.fetch = async () => Response.json(plain);
+
+    const response = await new ClineExecutor({ apiKey: "cline_fixture_key" }).chatCompletion({
+        model: "cline/deepseek/deepseek-v4.1-flash",
+        messages: [{ role: "user", content: "Reply with exactly OK" }]
+    } as ChatCompletionRequest);
+
+    assert.equal(response.choices[0]?.message.content, "plain");
+});
+
+test("Cline surfaces a failed { data, success } envelope as an error", async () => {
+    globalThis.fetch = async () => Response.json({ data: "model not found", success: false });
+
+    await assert.rejects(
+        () =>
+            new ClineExecutor({ apiKey: "cline_fixture_key" }).chatCompletion({
+                model: "cline/deepseek/deepseek-v4.1-flash",
+                messages: [{ role: "user", content: "Reply with exactly OK" }]
+            } as ChatCompletionRequest),
+        /Cline Provider Error: model not found/
+    );
+});
+
+test("Cline raises SSE error frames instead of yielding them as chunks", async () => {
+    const errorFrame = {
+        error: {
+            code: "stream_initialization_failed",
+            message: "Model 'deepseek/deepseek-v3' not found",
+            type: "stream_error"
+        }
+    };
+    const sse = `data: ${JSON.stringify(errorFrame)}\n\ndata: [DONE]\n\n`;
+    globalThis.fetch = async () =>
+        new Response(sse, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" }
+        });
+
+    const chunks: ChatCompletionChunk[] = [];
+    await assert.rejects(async () => {
+        const stream = new ClineExecutor({
+            apiKey: "cline_fixture_key"
+        }).chatCompletionStream({
+            model: "cline/deepseek/deepseek-v4.1-flash",
+            messages: [{ role: "user", content: "Reply with exactly OK" }],
+            stream: true
+        } as ChatCompletionRequest);
+        for await (const chunk of stream) chunks.push(chunk);
+    }, /OpenAI Provider Stream Error: Model 'deepseek\/deepseek-v3' not found \(stream_initialization_failed\)/);
+
+    assert.equal(chunks.length, 0);
 });

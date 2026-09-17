@@ -10,7 +10,12 @@ import type {
     ModelObject,
     RequestAttemptBudget
 } from "@srouter/types";
-import { parseDataLine, streamLines } from "./base.js";
+import {
+    DescribeErrorPayload,
+    parseDataLine,
+    streamLines,
+    type UpstreamErrorPayload
+} from "./base.js";
 import { fetchWithRetry } from "./retry.js";
 
 function stripProviderPrefix(model: string): string {
@@ -75,6 +80,15 @@ export class OpenAIExecutor implements AIProvider {
         return headers;
     }
 
+    /**
+     * Last step before a decoded non-streaming payload reaches callers. Drivers
+     * whose upstream wraps the OpenAI payload (the hosted Cline API answers with
+     * `{ data, success }`) override this to unwrap the envelope.
+     */
+    protected NormalizeResponsePayload<T extends object>(payload: T): T {
+        return payload;
+    }
+
     async listModels(): Promise<ModelObject[]> {
         try {
             const res = await fetch(`${this.baseUrl}/models`, {
@@ -118,7 +132,7 @@ export class OpenAIExecutor implements AIProvider {
             throw new Error(`OpenAI Provider Error (${res.status}): ${errorText}`);
         }
 
-        return (await res.json()) as ChatCompletionResponse;
+        return this.NormalizeResponsePayload<ChatCompletionResponse>(await res.json());
     }
 
     async *chatCompletionStream(
@@ -155,12 +169,23 @@ export class OpenAIExecutor implements AIProvider {
         for await (const line of streamLines(res.body)) {
             const jsonStr = parseDataLine(line);
             if (jsonStr === null) continue;
+            let parsed: ChatCompletionChunk & { error?: UpstreamErrorPayload };
             try {
-                const parsed = JSON.parse(jsonStr) as ChatCompletionChunk;
-                yield parsed;
+                parsed = JSON.parse(jsonStr) as ChatCompletionChunk & {
+                    error?: UpstreamErrorPayload;
+                };
             } catch {
                 // ignore malformed JSON chunk
+                continue;
             }
+            // Gateways report mid-stream failures as an error frame instead of a
+            // chunk; yielding it would truncate the response without any signal.
+            if (parsed.error !== undefined && parsed.error !== null) {
+                throw new Error(
+                    `OpenAI Provider Stream Error: ${DescribeErrorPayload(parsed.error)}`
+                );
+            }
+            yield parsed;
         }
     }
 
@@ -184,6 +209,6 @@ export class OpenAIExecutor implements AIProvider {
             throw new Error(`OpenAI Provider Image Error (${res.status}): ${errorText}`);
         }
 
-        return (await res.json()) as ImageGenerationResponse;
+        return this.NormalizeResponsePayload<ImageGenerationResponse>(await res.json());
     }
 }
