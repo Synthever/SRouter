@@ -34,6 +34,7 @@ import {
     AtriaExecutor,
     BAIExecutor,
     BluesMindsExecutor,
+    ClineExecutor,
     CodeBuddyExecutor,
     CodexExecutor,
     CommandCodeExecutor,
@@ -302,6 +303,17 @@ export async function loadSavedProvidersFromDB(): Promise<void> {
                         id: p.id || p.providerId,
                         name: p.name,
                         baseUrl: baseUrl || ATRIA_BASE_URL,
+                        apiKey: p.apiKey,
+                        accessToken: p.accessToken
+                    })
+                );
+                break;
+            case isProviderBaseId(p.id, "cline") || providerType === "cline":
+                registry.registerProvider(
+                    new ClineExecutor({
+                        id: p.id || p.providerId,
+                        name: p.name,
+                        baseUrl,
                         apiKey: p.apiKey,
                         accessToken: p.accessToken
                     })

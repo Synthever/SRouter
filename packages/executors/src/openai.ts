@@ -25,6 +25,7 @@ export interface OpenAIExecutorOptions {
     baseUrl?: string;
     apiKey?: string;
     accessToken?: string;
+    additionalHeaders?: Record<string, string>;
 }
 
 export class OpenAIExecutor implements AIProvider {
@@ -34,6 +35,7 @@ export class OpenAIExecutor implements AIProvider {
     private baseUrl: string;
     private apiKey: string;
     private accessToken: string;
+    private additionalHeaders: Record<string, string>;
 
     constructor(options: OpenAIExecutorOptions = {}) {
         this.id = options.id ?? "openai";
@@ -42,6 +44,7 @@ export class OpenAIExecutor implements AIProvider {
         this.baseUrl = (options.baseUrl ?? OPENAI_BASE_URL).replace(/\/$/, "");
         this.apiKey = options.apiKey ?? "";
         this.accessToken = options.accessToken ?? "";
+        this.additionalHeaders = options.additionalHeaders ?? {};
     }
 
     /**
@@ -58,6 +61,7 @@ export class OpenAIExecutor implements AIProvider {
             "Accept-Encoding": "identity",
             Accept: accept ?? "application/json"
         };
+        Object.assign(headers, this.additionalHeaders);
         const token = this.accessToken || this.apiKey;
         if (token) {
             headers["Authorization"] = `Bearer ${token}`;
