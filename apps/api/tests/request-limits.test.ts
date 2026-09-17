@@ -57,6 +57,13 @@ test("chat schema rejects oversized structural payloads", async () => {
         }).success === false
     );
     assert.ok(ChatCompletionRequestSchema.safeParse({ ...base, max_tokens: 4096 }).success);
+    const reasoning = ChatCompletionRequestSchema.safeParse({
+        ...base,
+        reasoning_effort: "high",
+        reasoning: { effort: "high", summary: "auto" },
+        thinking: { type: "enabled", budget_tokens: 512 }
+    });
+    assert.equal(reasoning.success, true);
 });
 
 test("anthropic schema keeps valid shapes and rejects runaway payloads", async () => {
@@ -124,7 +131,13 @@ test("SSRF: private, loopback, link-local, CGNAT, and multicast addresses are bl
     ]) {
         assert.equal(IsPrivateIpAddress(Address), true, `${Address} should be blocked`);
     }
-    for (const Address of ["8.8.8.8", "1.1.1.1", "172.15.0.1", "100.128.0.1", "2606:4700:4700::1111"]) {
+    for (const Address of [
+        "8.8.8.8",
+        "1.1.1.1",
+        "172.15.0.1",
+        "100.128.0.1",
+        "2606:4700:4700::1111"
+    ]) {
         assert.equal(IsPrivateIpAddress(Address), false, `${Address} should be allowed`);
     }
 });

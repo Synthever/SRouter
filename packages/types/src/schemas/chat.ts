@@ -117,7 +117,28 @@ export const ChatCompletionRequestSchema = z.object({
             strict: z.boolean().optional()
         })
         .passthrough()
-        .optional()
+        .optional(),
+    reasoning_effort: z.string().max(64).optional(),
+    reasoning: z
+        .object({
+            effort: z.string().max(64).optional(),
+            summary: z.string().max(64).optional()
+        })
+        .passthrough()
+        .optional(),
+    thinking: z
+        .union([
+            z.boolean(),
+            z
+                .object({
+                    type: z.enum(["enabled", "disabled", "adaptive"]).optional(),
+                    budget_tokens: z.number().int().positive().max(1_000_000).optional()
+                })
+                .passthrough()
+        ])
+        .optional(),
+    enable_thinking: z.boolean().optional(),
+    thinking_budget: z.number().int().positive().max(1_000_000).optional()
 });
 
 export type ChatCompletionRequestZod = z.infer<typeof ChatCompletionRequestSchema>;

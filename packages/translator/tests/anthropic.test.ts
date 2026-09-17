@@ -118,6 +118,53 @@ test("anthropicToOpenAIRequest maps inline system message role", () => {
     assert.equal(openAIReq.messages[1]?.content, "Run test suite");
 });
 
+test("anthropic thinking maps to OpenAI reasoning controls", () => {
+    const enabled = AnthropicToOpenAIRequest({
+        model: "reasoning-model",
+        max_tokens: 1024,
+        thinking: { type: "enabled", budget_tokens: 512 },
+        messages: [{ role: "user", content: "Think" }]
+    });
+    assert.deepEqual(enabled.reasoning, { effort: "high" });
+
+    const disabled = AnthropicToOpenAIRequest({
+        model: "reasoning-model",
+        max_tokens: 1024,
+        thinking: { type: "disabled" },
+        messages: [{ role: "user", content: "Do not think" }]
+    });
+    assert.equal(disabled.reasoning_effort, "none");
+});
+
+test("OpenAI reasoning output maps to Anthropic thinking blocks", () => {
+    const response = OpenAIToAnthropicResponse(
+        {
+            id: "chatcmpl-reasoning",
+            object: "chat.completion",
+            created: 1786759000,
+            model: "reasoning-model",
+            choices: [
+                {
+                    index: 0,
+                    message: {
+                        role: "assistant",
+                        content: "42",
+                        reasoning: "The answer follows from the calculation."
+                    },
+                    finish_reason: "stop"
+                }
+            ]
+        },
+        "reasoning-model",
+        { allowThinking: true }
+    );
+
+    assert.deepEqual(response.content, [
+        { type: "thinking", thinking: "The answer follows from the calculation." },
+        { type: "text", text: "42" }
+    ]);
+});
+
 test("openAIToAnthropicResponse maps OpenAI response to Anthropic message format", () => {
     const openAIRes: ChatCompletionResponse = {
         id: "chatcmpl-test-123",
@@ -167,6 +214,48 @@ test("openAIToAnthropicResponse maps OpenAI response to Anthropic message format
 
     assert.equal(antRes.usage.input_tokens, 150);
     assert.equal(antRes.usage.output_tokens, 45);
+});
+
+test("openAIToAnthropicStream translates reasoning deltas into thinking blocks", async () => {
+    async function* mockStream(): AsyncGenerator<ChatCompletionChunk> {
+        yield {
+            id: "chatcmpl-reasoning-stream",
+            object: "chat.completion.chunk",
+            created: 1786759000,
+            model: "reasoning-model",
+            choices: [
+                {
+                    index: 0,
+                    delta: { reasoning: "Think first." },
+                    finish_reason: null
+                }
+            ]
+        };
+        yield {
+            id: "chatcmpl-reasoning-stream",
+            object: "chat.completion.chunk",
+            created: 1786759000,
+            model: "reasoning-model",
+            choices: [
+                {
+                    index: 0,
+                    delta: { content: "42" },
+                    finish_reason: "stop"
+                }
+            ]
+        };
+    }
+
+    const events: unknown[] = [];
+    for await (const event of OpenAIToAnthropicStream(mockStream(), "reasoning-model", {
+        allowThinking: true
+    })) {
+        events.push(event);
+    }
+
+    assert.equal((events[1] as { content_block: { type: string } }).content_block.type, "thinking");
+    assert.equal((events[2] as { delta: { thinking: string } }).delta.thinking, "Think first.");
+    assert.equal((events[4] as { content_block: { type: string } }).content_block.type, "text");
 });
 
 test("openAIToAnthropicStream translates streaming chunks into Anthropic SSE events", async () => {

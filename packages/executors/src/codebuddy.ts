@@ -94,7 +94,7 @@ export class CodeBuddyExecutor implements AIProvider {
         };
 
         // Handle reasoning effort
-        const eff = (req as unknown as { reasoning_effort?: unknown }).reasoning_effort;
+        const eff = req.reasoning_effort;
         if (eff === "none" || eff === "off") {
             delete transformed.reasoning_effort;
         } else if (eff) {

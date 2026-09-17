@@ -53,7 +53,7 @@ export class MessagesController {
 
         const ApiKeyId = ApiKeyRow?.id;
         const OpenAIReq = AnthropicToOpenAIRequest(body);
-        const isThinkingEnabled = body.thinking?.type !== "disabled";
+        const isThinkingEnabled = body.thinking !== undefined && body.thinking.type !== "disabled";
         const rawIp =
             c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
             c.req.header("x-real-ip") ||

@@ -61,6 +61,8 @@ export interface ChatMessage {
     name?: string;
     tool_calls?: ToolCall[];
     tool_call_id?: string;
+    /** Upstream reasoning trace; present on responses from reasoning models. */
+    reasoning?: string;
 }
 
 export interface ChatCompletionRequest {
@@ -89,6 +91,9 @@ export interface ChatCompletionRequest {
     };
     reasoning_effort?: "none" | "low" | "medium" | "high" | (string & {});
     reasoning?: { effort?: string; summary?: string };
+    thinking?: boolean | { type?: "enabled" | "disabled" | "adaptive"; budget_tokens?: number };
+    enable_thinking?: boolean;
+    thinking_budget?: number;
 }
 
 export interface UsageInfo {
@@ -122,6 +127,7 @@ export interface ChatCompletionResponse {
 export interface ChatCompletionChunkDelta {
     role?: ChatRole;
     content?: string;
+    reasoning?: string;
     reasoning_content?: string;
     tool_calls?: ChatCompletionChunkDeltaToolCall[];
 }

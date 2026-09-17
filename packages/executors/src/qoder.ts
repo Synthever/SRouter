@@ -68,11 +68,10 @@ export function isQwenThinkingActive(
     req: ChatCompletionRequest,
     modelConfig?: Record<string, unknown>
 ): boolean {
-    const raw = req as unknown as Record<string, unknown>;
-    const thinking = raw.thinking;
-    if (thinking === true || raw.enable_thinking === true) return true;
-    if (typeof thinking === "object" && thinking !== null && !Array.isArray(thinking)) {
-        if ((thinking as Record<string, unknown>).type === "enabled") return true;
+    const thinking = req.thinking;
+    if (thinking === true || req.enable_thinking === true) return true;
+    if (typeof thinking === "object" && thinking !== null && thinking.type === "enabled") {
+        return true;
     }
     return Boolean(modelConfig?.is_reasoning);
 }

@@ -168,6 +168,13 @@ function mapAnthropicToolChoice(
     return undefined;
 }
 
+function extractReasoning(message: {
+    reasoning_content?: string;
+    reasoning?: string;
+}): string | undefined {
+    return message.reasoning_content || message.reasoning || undefined;
+}
+
 export function AnthropicToOpenAIRequest(req: AnthropicMessageRequest): ChatCompletionRequest {
     const messages: ChatMessage[] = [];
 
@@ -178,6 +185,8 @@ export function AnthropicToOpenAIRequest(req: AnthropicMessageRequest): ChatComp
         messages.push(...mapAnthropicMessage(msg));
     }
 
+    const thinking = req.thinking;
+
     return {
         model: req.model,
         messages,
@@ -187,7 +196,12 @@ export function AnthropicToOpenAIRequest(req: AnthropicMessageRequest): ChatComp
         stop: req.stop_sequences,
         tools: mapAnthropicTools(req.tools),
         tool_choice: mapAnthropicToolChoice(req.tool_choice),
-        stream: req.stream ?? false
+        stream: req.stream ?? false,
+        ...(thinking?.type === "disabled"
+            ? { reasoning_effort: "none" }
+            : thinking
+              ? { reasoning: { effort: "high" } }
+              : {})
     };
 }
 
@@ -213,7 +227,7 @@ export function OpenAIToAnthropicResponse(
 
     if (choice?.message) {
         const msg = choice.message;
-        const reasoning = (msg as { reasoning_content?: string }).reasoning_content;
+        const reasoning = extractReasoning(msg);
 
         if (reasoning && options.allowThinking) {
             contentBlocks.push({
@@ -318,7 +332,7 @@ export async function* OpenAIToAnthropicStream(
         const delta = choice.delta;
         if (!delta) continue;
 
-        const reasoning = (delta as { reasoning_content?: string }).reasoning_content;
+        const reasoning = extractReasoning(delta);
 
         if (reasoning && options.allowThinking) {
             if (currentBlockType !== "thinking") {
