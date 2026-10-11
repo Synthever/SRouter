@@ -30,3 +30,5 @@ dist-ssr
 # TanStack Router scratch directory; `routeTree.gen.ts` is committed on purpose
 # (the TanStack convention) so a fresh clone typechecks before any generation.
 client/.tanstack/
+.claude
+.mcp.json
