@@ -38,10 +38,13 @@ fn opencode_zen_exposes_verified_free_models() {
             "space-bunny-free",
             "nemotron-3.5-lightning-free",
             "nemotron-3-ultra-free",
-            "mimo-v2.5-free",
             "mimo-v2.6-flash-free",
             "big-pickle",
-            "longcat-2.5-preview-free"
+            "longcat-2.5-preview-free",
+            "exo-free",
+            "step-5-preview-free",
+            "ling-3.0-flash-fin-free",
+            "ling-3.1-flash-free"
         ]
     );
 }
