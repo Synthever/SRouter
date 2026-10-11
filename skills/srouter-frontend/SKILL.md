@@ -71,8 +71,36 @@ If a generated file must be touched at all, generate it, then `git diff` it to c
 - **Protected screens go under `client/src/routes/_authenticated/`**, never at the routes root — that is where the session gate lives.
 - **Server state is TanStack Query only.** Declare a `queryOptions()` factory next to its endpoint in `client/src/api/<domain>.ts`; local UI state is `useState`. No `useEffect` + `fetch`.
 - **Errors are toasted through the in-house stack.** `toast.error(...)`/`toast.success(...)` from `@/components/arc/toast-stack/toast-stack` — the provider and the stack itself are mounted once in `routes/__root.tsx`. No third-party toast library is installed; never add one. Branch on `APIError.status`/`.code`, never on message text.
-- **Reuse before adding.** Three vocabularies already exist: `client/src/components/arc/` (UIARC kit — the primary visual vocabulary: button, badge, metric-card, sortable-data-table, toast-stack, theme-switch, animated-counter, line-chart, … over CSS modules and `foundation.css` tokens), `client/src/components/ui/` (shadcn on Base UI), and `client/src/components/gauge/` (SVG dials). Visual direction is owned by the repo root `DESIGN.md` (ENERGY 1 / RHYTHM 1 / MOTION 2, Inter, one `--accent`, tokens from `foundation.css`) — apply it, do not invent a new one. Adding a charting or component dependency for something these already cover is the wrong move.
+- **Reuse before adding** — see [Component sourcing](#component-sourcing): `arc/` first, `ui/` second, install from the `@uiarc`/shadcn registries when something is missing, and ask the user before writing a bespoke component or adding a dependency.
 - **Serial, not clever.** The formatter is prettier with the Tailwind plugin: no semicolons, double quotes, 80 columns. Do not reformat unrelated code.
+
+## Component sourcing
+
+Two component libraries are installed and registered. The order is fixed:
+
+1. **`components/arc/` — UIARC (primary vocabulary).** Copy-paste components with CSS modules and
+   semantic tokens (`foundation.css`, installed once; `data-theme="light|dark"` on `<html>`). Docs:
+   the library index is <https://uiarc.dev/llms.txt>; every component has its own markdown page
+   (when to use / when not to, props, keyboard, accessibility, motion, responsive). Read that page
+   before using a component, and use only documented props.
+2. **`components/ui/` — shadcn/ui on Base UI.** Docs: <https://ui.shadcn.com/docs> (full component
+   directory; machine-readable index at <https://ui.shadcn.com/llms.txt>). Compose with Base UI's
+   `render` prop, never Radix `asChild`.
+
+**When a needed component does not exist in either folder:**
+
+- First try to compose it from what is there — that is what the Arc blocks are for.
+- Otherwise **install it from the registry, do not hand-roll it**: `bunx shadcn@latest add @uiarc/<name>`
+  (the `@uiarc` registry is already declared in `client/components.json`) or `bunx shadcn@latest add <name>`
+  for shadcn/ui. Arc free items install the same way; Arc **Pro** items are licensed — never reconstruct
+  their source, offer the free alternative instead.
+- If neither registry carries it either, **stop and tell the user** which component is missing and what
+  you propose to add. Do not invent a bespoke component or add a dependency without that answer.
+
+Arc house rules (from the library's agent rules): semantic tokens only (`--surface`, `--foreground`,
+`--text-secondary`, `--border`, `--accent`, `--success/warning/danger`), motion through the presets in
+`components/arc/lib/motion-tokens.ts` with a reduced-motion branch, sentence-case copy, regular/medium
+weights only, no decorative gradients or glows, no focus rings on pointer focus.
 
 ## Verification
 

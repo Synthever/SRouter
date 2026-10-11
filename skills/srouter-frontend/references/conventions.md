@@ -175,6 +175,7 @@ export function describe(error: unknown): string { … }
 - **Both themes are required.** `:root` and `.dark` both define every token in OKLCH; a class that only reads correctly in one is incomplete.
 - Density is deliberately tiny: `text-xs` for body copy, `h-7`/`size-7` for controls, `gap-1..3`. Match the surrounding screen rather than importing a looser default.
 - shadcn components are generated over **Base UI**, so composition uses Base UI's `render` prop — not Radix's `asChild`.
+- `src/components/arc/` (UIARC) is the primary visual vocabulary. Arc components use **CSS modules + CSS variables, not Tailwind classes**, and their tokens live in `components/arc/foundation.css` (`--surface`, `--surface-muted`, `--text-secondary`, `--radius-*`, `--space-*`; theme via `data-theme="light|dark"` on `<html>`, not the `.dark` class the Tailwind tokens use). Screens compose the two idioms — Arc for chrome and controls, Tailwind utilities for page layout — and each stays inside its own rules. Docs: <https://uiarc.dev/llms.txt>.
 - `src/components/gauge/` is a self-contained SVG kit (arcs, ticks, needle, tooltip, spring animation) with a barrel export at `components/gauge/index.ts`. It has zero imports today — reuse it for dials and meters instead of adding a chart library.
 
 ## Forms
