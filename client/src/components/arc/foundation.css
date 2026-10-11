@@ -61,9 +61,9 @@
   --space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem;
   --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem;
   --space-12: 3rem; --space-16: 4rem; --space-20: 5rem; --space-24: 6rem;
-  --radius-control: 1.125rem; --radius-panel: 1.625rem; --radius-surface: 2.125rem; --radius-pill: 9999px;
+  --radius-control: 1.125rem; --radius-panel: 1.625rem; --radius-surface: 1.5rem; --radius-pill: 9999px;
   --control-height-sm: 2.25rem; --control-height-md: 2.75rem; --control-height-lg: 3.125rem;
-  --font-display: var(--font-geist, "Geist Variable"), sans-serif;
+  --font-display: var(--font-geist, "Geist Variable", "Inter Variable"), sans-serif;
   --font-body: var(--font-inter, "Inter Variable"), sans-serif;
   --text-xs: .75rem; --text-sm: .875rem; --text-base: 1rem; --text-lg: 1.125rem;
   --text-xl: 1.375rem; --text-2xl: 1.75rem; --text-3xl: 2.25rem;
@@ -79,7 +79,9 @@
   --duration-instant: 120ms; --duration-fast: 160ms; --duration-standard: 240ms; --duration-considered: 480ms; --duration-spring: 580ms;
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root.dark,
+.dark {
   color-scheme: dark;
   --background: oklch(19% 0 0);
   --surface: oklch(21.5% 0 0);

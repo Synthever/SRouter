@@ -1,581 +1,508 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router"
-import {
-  BarChart3,
-  CheckCircle2,
-  Clock,
-  Cpu,
-  Database,
-  KeyRound,
-  Layers,
-  Radio,
-  Server,
-  ShieldCheck,
-  Terminal,
-  Zap,
-} from "lucide-react"
+import { createFileRoute } from "@tanstack/react-router"
+import { Cpu, Download, Radio } from "lucide-react"
+import { useState } from "react"
 
 import { Badge } from "@/components/arc/badge/badge"
-import type { DashboardTab } from "@/components/layout/sidebar"
+import { Button } from "@/components/arc/button/button"
+import { EmptyState } from "@/components/arc/empty-state/empty-state"
+import {
+  LineChart,
+  type LineChartDatum,
+  type LineChartSeries,
+} from "@/components/arc/line-chart/line-chart"
+import { MetricCard } from "@/components/arc/metric-card/metric-card"
+import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
+import {
+  SortableDataTable,
+  type DataColumn,
+} from "@/components/arc/sortable-data-table/sortable-data-table"
+import { toast } from "@/components/arc/toast-stack/toast-stack"
+import { SectionHeader } from "@/components/layout/section-header"
 
 export const Route = createFileRoute("/_authenticated/")({
-  component: Dashboard,
+  component: OverviewPage,
 })
 
-function StatCard({
-  title,
-  value,
-  caption,
-  icon: Icon,
-  trend,
-}: {
-  title: string
-  value: string
-  caption: string
-  icon: React.ComponentType<{ size?: number; className?: string }>
-  trend?: string
-}) {
-  return (
-    <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs transition-colors hover:border-foreground/20">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">
-          {title}
-        </span>
-        <div className="flex size-7 items-center justify-center rounded-lg bg-foreground/5 text-foreground dark:bg-white/10">
-          <Icon size={15} />
-        </div>
-      </div>
-      <div className="mt-4 flex flex-col gap-1">
-        <div className="flex items-baseline gap-2">
-          <span className="font-sans text-2xl font-semibold tracking-tight text-foreground tabular-nums">
-            {value}
-          </span>
-          {trend && (
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              {trend}
-            </span>
-          )}
-        </div>
-        <span className="text-xs text-muted-foreground">{caption}</span>
-      </div>
-    </div>
-  )
+const RANGE_OPTIONS = [
+  { value: "1h", label: "1h" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7d" },
+  { value: "30d", label: "30d" },
+]
+
+const CHART_SERIES: LineChartSeries[] = [
+  {
+    key: "throughput",
+    label: "Tokens/sec",
+    area: true,
+  },
+  {
+    key: "latency",
+    label: "Latency (ms)",
+    dashed: true,
+  },
+]
+
+interface ModelMetricRow extends Record<string, unknown> {
+  id: string
+  model: string
+  provider: string
+  requests: number
+  inputTokens: number
+  outputTokens: number
+  cachedRate: string
+  latency: number
+  cost: number
 }
 
-function SectionHeader({
-  title,
-  description,
-  badge,
-}: {
-  title: string
-  description: string
-  badge?: string
-}) {
-  return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-          {title}
-        </h2>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      {badge && (
-        <Badge tone="neutral" size="sm" className="self-start sm:self-auto">
-          {badge}
-        </Badge>
-      )}
-    </div>
-  )
-}
+const MODEL_DATA_24H: ModelMetricRow[] = [
+  {
+    id: "gpt-4o",
+    model: "gpt-4o",
+    provider: "OpenAI",
+    requests: 48920,
+    inputTokens: 18450000,
+    outputTokens: 7210000,
+    cachedRate: "42.1%",
+    latency: 165,
+    cost: 11.245,
+  },
+  {
+    id: "claude-3-5-sonnet",
+    model: "claude-3-5-sonnet",
+    provider: "Anthropic",
+    requests: 39180,
+    inputTokens: 14200000,
+    outputTokens: 6180000,
+    cachedRate: "58.4%",
+    latency: 182,
+    cost: 8.62,
+  },
+  {
+    id: "deepseek-chat",
+    model: "deepseek-chat",
+    provider: "DeepSeek",
+    requests: 18420,
+    inputTokens: 7120000,
+    outputTokens: 3410000,
+    cachedRate: "28.5%",
+    latency: 124,
+    cost: 1.84,
+  },
+  {
+    id: "gemini-1-5-flash",
+    model: "gemini-1.5-flash",
+    provider: "Google Gemini",
+    requests: 9840,
+    inputTokens: 3890000,
+    outputTokens: 1420000,
+    cachedRate: "19.2%",
+    latency: 98,
+    cost: 0.745,
+  },
+  {
+    id: "llama-3-2-local",
+    model: "llama3.2:3b",
+    provider: "Ollama Local",
+    requests: 2090,
+    inputTokens: 780000,
+    outputTokens: 390000,
+    cachedRate: "0.0%",
+    latency: 45,
+    cost: 0.0,
+  },
+]
 
-function OverviewSurface() {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Gateway Overview"
-        description="Live operational telemetry, model routing status, and traffic throughput."
-        badge="Active Cluster"
-      />
+const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
+  {
+    key: "model",
+    label: "Model",
+    width: 170,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="font-mono text-xs font-medium text-foreground whitespace-nowrap">
+        {row.model}
+      </span>
+    ),
+  },
+  {
+    key: "provider",
+    label: "Provider",
+    width: 140,
+    sortable: true,
+    render: (_val, row) => (
+      <Badge tone="neutral" size="sm" className="whitespace-nowrap">
+        {row.provider}
+      </Badge>
+    ),
+  },
+  {
+    key: "requests",
+    label: "Requests",
+    width: 110,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="text-foreground tabular-nums whitespace-nowrap">
+        {row.requests.toLocaleString()}
+      </span>
+    ),
+  },
+  {
+    key: "inputTokens",
+    label: "Input tokens",
+    width: 130,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+        {row.inputTokens.toLocaleString()}
+      </span>
+    ),
+  },
+  {
+    key: "outputTokens",
+    label: "Output tokens",
+    width: 130,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+        {row.outputTokens.toLocaleString()}
+      </span>
+    ),
+  },
+  {
+    key: "cachedRate",
+    label: "Prompt cache",
+    width: 125,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="font-medium text-emerald-600 tabular-nums dark:text-emerald-400 whitespace-nowrap">
+        {row.cachedRate}
+      </span>
+    ),
+  },
+  {
+    key: "latency",
+    label: "Latency",
+    width: 105,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="text-foreground tabular-nums whitespace-nowrap">
+        {row.latency} ms
+      </span>
+    ),
+  },
+  {
+    key: "cost",
+    label: "Est. cost",
+    width: 115,
+    numeric: true,
+    sortable: true,
+    render: (_val, row) => (
+      <span className="font-medium text-foreground tabular-nums whitespace-nowrap">
+        ${row.cost.toFixed(4)}
+      </span>
+    ),
+  },
+]
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Active Providers"
-          value="9 / 9"
-          caption="OpenAI, Anthropic, Gemini & custom"
-          icon={Cpu}
-          trend="Healthy"
-        />
-        <StatCard
-          title="Request Latency"
-          value="142 ms"
-          caption="p50 upstream response time"
-          icon={Clock}
-          trend="-12ms"
-        />
-        <StatCard
-          title="Streaming Throughput"
-          value="1.2k t/s"
-          caption="Token generation velocity"
-          icon={Zap}
-        />
-        <StatCard
-          title="Database Storage"
-          value="SQLite v4"
-          caption="WAL mode · Auto-migrated"
-          icon={Database}
-        />
-      </div>
+function getChartDataForRange(range: string): LineChartDatum[] {
+  if (range === "1h") {
+    return [
+      {
+        key: "t0",
+        label: "50m ago",
+        axisLabel: "10m",
+        values: { throughput: 640, latency: 135 },
+      },
+      {
+        key: "t1",
+        label: "40m ago",
+        axisLabel: "20m",
+        values: { throughput: 790, latency: 142 },
+      },
+      {
+        key: "t2",
+        label: "30m ago",
+        axisLabel: "30m",
+        values: { throughput: 920, latency: 128 },
+      },
+      {
+        key: "t3",
+        label: "20m ago",
+        axisLabel: "40m",
+        values: { throughput: 1150, latency: 132 },
+      },
+      {
+        key: "t4",
+        label: "10m ago",
+        axisLabel: "50m",
+        values: { throughput: 1320, latency: 125 },
+      },
+      {
+        key: "t5",
+        label: "Now",
+        axisLabel: "Now",
+        values: { throughput: 1240, latency: 128 },
+      },
+    ]
+  }
 
-      {/* Two Column Section */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Gateway Architecture Panel */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-border pb-3.5">
-            <div className="flex items-center gap-2">
-              <Server size={16} className="text-foreground" />
-              <h3 className="text-xs font-semibold tracking-tight text-foreground uppercase">
-                Gateway Engine Pipeline
-              </h3>
-            </div>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-              Proxy Online
-            </span>
-          </div>
+  if (range === "7d") {
+    return [
+      {
+        key: "d1",
+        label: "Mon",
+        axisLabel: "Mon",
+        values: { throughput: 880, latency: 162 },
+      },
+      {
+        key: "d2",
+        label: "Tue",
+        axisLabel: "Tue",
+        values: { throughput: 1040, latency: 155 },
+      },
+      {
+        key: "d3",
+        label: "Wed",
+        axisLabel: "Wed",
+        values: { throughput: 1250, latency: 148 },
+      },
+      {
+        key: "d4",
+        label: "Thu",
+        axisLabel: "Thu",
+        values: { throughput: 1410, latency: 140 },
+      },
+      {
+        key: "d5",
+        label: "Fri",
+        axisLabel: "Fri",
+        values: { throughput: 1320, latency: 144 },
+      },
+      {
+        key: "d6",
+        label: "Sat",
+        axisLabel: "Sat",
+        values: { throughput: 750, latency: 120 },
+      },
+      {
+        key: "d7",
+        label: "Sun",
+        axisLabel: "Sun",
+        values: { throughput: 820, latency: 125 },
+      },
+    ]
+  }
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-border/70 bg-muted/20 p-3.5">
-              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <Radio size={14} className="text-muted-foreground" />
-                <span>OpenAI Wire</span>
-              </div>
-              <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                /v1/chat/completions
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
-                <CheckCircle2 size={12} className="text-emerald-500" />
-                <span>SSE Streaming</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border/70 bg-muted/20 p-3.5">
-              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <Layers size={14} className="text-muted-foreground" />
-                <span>Anthropic Wire</span>
-              </div>
-              <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                /v1/messages
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
-                <CheckCircle2 size={12} className="text-emerald-500" />
-                <span>Format Translator</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border/70 bg-muted/20 p-3.5">
-              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <ShieldCheck size={14} className="text-muted-foreground" />
-                <span>Operator Layer</span>
-              </div>
-              <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                /v1/admin/*
-              </p>
-              <div className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
-                <CheckCircle2 size={12} className="text-emerald-500" />
-                <span>CSRF & Session Guard</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Security & System Info */}
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-2 border-b border-border pb-3.5">
-            <ShieldCheck size={16} className="text-foreground" />
-            <h3 className="text-xs font-semibold tracking-tight text-foreground uppercase">
-              Security Matrix
-            </h3>
-          </div>
-          <div className="mt-4 flex flex-col gap-3 text-xs">
-            <div className="flex items-center justify-between border-b border-border/50 py-1">
-              <span className="text-muted-foreground">Operator Session</span>
-              <span className="font-medium text-foreground">
-                HttpOnly Cookie (7d)
-              </span>
-            </div>
-            <div className="flex items-center justify-between border-b border-border/50 py-1">
-              <span className="text-muted-foreground">CSRF Protection</span>
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                Origin Guard Enforced
-              </span>
-            </div>
-            <div className="flex items-center justify-between border-b border-border/50 py-1">
-              <span className="text-muted-foreground">Rate Limiting</span>
-              <span className="font-medium text-foreground">
-                Adaptive Token Bucket
-              </span>
-            </div>
-            <div className="flex items-center justify-between py-1">
-              <span className="text-muted-foreground">Database Backend</span>
-              <span className="font-mono text-[11px] text-foreground">
-                srouter.db (SQLite 3)
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ProvidersSurface() {
-  const providers = [
+  // Default 24h
+  return [
     {
-      name: "OpenAI",
-      status: "Connected",
-      models: "gpt-4o, gpt-4o-mini, o1",
-      type: "Upstream Driver",
+      key: "h00",
+      label: "00:00",
+      axisLabel: "00:00",
+      values: { throughput: 420, latency: 110 },
     },
     {
-      name: "Anthropic",
-      status: "Connected",
-      models: "claude-3-5-sonnet, claude-3-5-haiku",
-      type: "Upstream Driver",
+      key: "h04",
+      label: "04:00",
+      axisLabel: "04:00",
+      values: { throughput: 310, latency: 98 },
     },
     {
-      name: "Google Gemini",
-      status: "Connected",
-      models: "gemini-1.5-pro, gemini-1.5-flash",
-      type: "Upstream Driver",
+      key: "h08",
+      label: "08:00",
+      axisLabel: "08:00",
+      values: { throughput: 850, latency: 135 },
     },
     {
-      name: "DeepSeek",
-      status: "Connected",
-      models: "deepseek-chat, deepseek-reasoner",
-      type: "Upstream Driver",
+      key: "h12",
+      label: "12:00",
+      axisLabel: "12:00",
+      values: { throughput: 1420, latency: 158 },
     },
     {
-      name: "Ollama / Local",
-      status: "Standby",
-      models: "llama3.2, mistral, qwen2.5",
-      type: "Local Runtime",
+      key: "h16",
+      label: "16:00",
+      axisLabel: "16:00",
+      values: { throughput: 1680, latency: 172 },
     },
     {
-      name: "Custom Vendor",
-      status: "Configurable",
-      models: "Per-model regex resolution",
-      type: "Custom Driver",
+      key: "h20",
+      label: "20:00",
+      axisLabel: "20:00",
+      values: { throughput: 1290, latency: 142 },
+    },
+    {
+      key: "h24",
+      label: "Current",
+      axisLabel: "Now",
+      values: { throughput: 1240, latency: 138 },
     },
   ]
+}
+
+function OverviewPage() {
+  const [range, setRange] = useState<string>("24h")
+  const chartData = getChartDataForRange(range)
+
+  const requestCount =
+    range === "1h"
+      ? 4820
+      : range === "24h"
+        ? 118450
+        : range === "7d"
+          ? 824100
+          : 3410800
+
+  const latencyP50 =
+    range === "1h" ? 128 : range === "24h" ? 142 : range === "7d" ? 154 : 148
+
+  const tokenVelocity =
+    range === "1h" ? 840 : range === "24h" ? 1240 : range === "7d" ? 1180 : 1310
+
+  const spendCost =
+    range === "1h"
+      ? 2.4
+      : range === "24h"
+        ? 24.18
+        : range === "7d"
+          ? 168.4
+          : 724.8
+
+  const handleExport = () => {
+    toast.success("Telemetry report exported")
+  }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5 sm:gap-6 min-w-0 max-w-full overflow-hidden">
       <SectionHeader
-        title="Model Providers"
-        description="Configured LLM backends, upstream drivers, and routing rules."
-        badge="6 Drivers Loaded"
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {providers.map((p) => (
-          <div
-            key={p.name}
-            className="flex flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs transition-colors hover:border-foreground/20"
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">
-                  {p.name}
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    p.status === "Connected"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <span
-                    className={`size-1.5 rounded-full ${p.status === "Connected" ? "bg-emerald-500" : "bg-muted-foreground"}`}
-                  />
-                  {p.status}
-                </span>
-              </div>
-              <span className="text-[11px] text-muted-foreground">
-                {p.type}
-              </span>
-            </div>
-            <div className="mt-4 border-t border-border/60 pt-3">
-              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                Models
-              </span>
-              <p className="mt-1 truncate font-mono text-[11px] text-foreground/80">
-                {p.models}
-              </p>
-            </div>
+        title="Gateway overview"
+        description="Live operational telemetry, model routing status, and traffic throughput."
+        badge="Cluster healthy"
+        actions={
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <SegmentedControl
+              options={RANGE_OPTIONS}
+              value={range}
+              onValueChange={setRange}
+            />
+            <Button variant="secondary" size="sm" onClick={handleExport}>
+              <Download size={14} aria-hidden="true" />
+              <span className="hidden xs:inline sm:inline">Export</span>
+              <span className="inline xs:hidden sm:hidden">Export</span>
+            </Button>
           </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function UsageSurface() {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Usage & Quota Telemetry"
-        description="Aggregated token statistics, inference cost estimations, and quota reservations."
-        badge="Live Metrics"
+        }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          title="Total Tokens Processed"
-          value="48,290,120"
-          caption="Input: 32.1M · Output: 16.1M"
-          icon={BarChart3}
+      {/* KPI Row using UIARC MetricCard */}
+      <section
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4"
+        aria-label="Key gateway telemetry numbers"
+      >
+        <MetricCard
+          label="Total requests"
+          value={requestCount}
+          change="+14.2%"
+          context="vs previous period"
         />
-        <StatCard
-          title="Estimated Incurred Cost"
-          value="$24.18"
-          caption="Calculated from vendor catalog pricing"
-          icon={Zap}
+        <MetricCard
+          label="Response latency"
+          value={latencyP50}
+          suffix=" ms"
+          change="-8.5%"
+          context="median upstream time"
         />
-        <StatCard
-          title="Cached Prompt Tokens"
-          value="12.4M"
-          caption="Saved ~38% on prompt cost"
-          icon={Layers}
-          trend="+38% efficiency"
+        <MetricCard
+          label="Token velocity"
+          value={tokenVelocity}
+          suffix=" t/s"
+          change="+22.1%"
+          context="streaming throughput"
         />
-      </div>
+        <MetricCard
+          label="Estimated spend"
+          value={spendCost}
+          prefix="$"
+          decimals={2}
+          change="+5.4%"
+          context="catalog billed total"
+        />
+      </section>
 
-      <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
-        Live streaming telemetry charts are connected. Request metrics
-        automatically update as gateway traffic flows through
-        `/v1/chat/completions`.
-      </div>
-    </div>
-  )
-}
-
-function LogsSurface() {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Request Logs"
-        description="Audit trail of every proxied LLM inference call logged directly into SQLite."
-        badge="SQLite Request Stream"
-      />
-
-      <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <Terminal size={15} className="text-foreground" />
-          <span className="text-xs font-semibold text-foreground">
-            Recent Gateway Activity
+      {/* Traffic Trend Section using UIARC LineChart */}
+      <section
+        className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs min-w-0"
+        aria-label="Gateway throughput over time"
+      >
+        <div className="mb-4 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <Radio size={15} className="text-foreground shrink-0" aria-hidden="true" />
+            <h2 className="text-xs font-semibold tracking-tight text-foreground">
+              Throughput and latency trends
+            </h2>
+          </div>
+          <span className="font-mono text-[11px] sm:text-xs text-muted-foreground">
+            {range === "1h"
+              ? "Window: past 60 minutes"
+              : range === "24h"
+                ? "Window: past 24 hours"
+                : range === "7d"
+                  ? "Window: past 7 days"
+                  : "Window: past 30 days"}
           </span>
         </div>
-        <div className="divide-y divide-border/50 text-xs">
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-                200 OK
-              </span>
-              <span className="font-mono text-foreground">
-                POST /v1/chat/completions
-              </span>
-              <span className="text-muted-foreground">
-                gpt-4o · 1,420 tokens
-              </span>
-            </div>
-            <span className="font-mono text-muted-foreground">
-              182ms · Just now
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-                200 OK
-              </span>
-              <span className="font-mono text-foreground">
-                POST /v1/messages
-              </span>
-              <span className="text-muted-foreground">
-                claude-3-5-sonnet · 2,890 tokens
-              </span>
-            </div>
-            <span className="font-mono text-muted-foreground">
-              245ms · 2m ago
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-                200 OK
-              </span>
-              <span className="font-mono text-foreground">
-                POST /v1/chat/completions
-              </span>
-              <span className="text-muted-foreground">
-                deepseek-reasoner · 850 tokens
-              </span>
-            </div>
-            <span className="font-mono text-muted-foreground">
-              310ms · 5m ago
-            </span>
-          </div>
+
+        <div className="w-full min-w-0 overflow-hidden">
+          <LineChart
+            data={chartData}
+            series={CHART_SERIES}
+            label="Gateway telemetry"
+            height={240}
+            unit=""
+          />
         </div>
-      </div>
-    </div>
-  )
-}
+      </section>
 
-function KeysSurface() {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="API Keys Management"
-        description="Issue, rotate, and restrict client authentication keys with rate & quota limits."
-        badge="Access Control"
-      />
-
-      <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-        <div className="flex items-center justify-between border-b border-border pb-3">
+      {/* Model Breakdown Section using UIARC SortableDataTable */}
+      <section
+        className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs min-w-0"
+        aria-label="Top active models"
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
           <div className="flex items-center gap-2">
-            <KeyRound size={15} className="text-foreground" />
-            <span className="text-xs font-semibold text-foreground">
-              Active Keys
-            </span>
+            <Cpu size={15} className="text-foreground shrink-0" aria-hidden="true" />
+            <h2 className="text-xs font-semibold tracking-tight text-foreground">
+              Model performance breakdown
+            </h2>
           </div>
-          <button
-            type="button"
-            className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background hover:bg-foreground/90"
-          >
-            Create New Key
-          </button>
+          <Badge tone="neutral" size="sm">
+            5 models active
+          </Badge>
         </div>
-        <div className="divide-y divide-border/50 text-xs">
-          <div className="flex items-center justify-between py-3.5">
-            <div>
-              <p className="font-medium text-foreground">
-                Default Production Key
-              </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
-                sr-prod-9a8f...4e1b
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground">
-                Rate limit: 120 req/m
-              </span>
-              <Badge tone="success" size="sm">
-                Active
-              </Badge>
-            </div>
+
+        {MODEL_DATA_24H.length === 0 ? (
+          <EmptyState
+            title="No model metrics recorded"
+            description="Active proxy statistics will populate as completions are routed."
+          />
+        ) : (
+          <div className="w-full min-w-0">
+            <SortableDataTable
+              rows={MODEL_DATA_24H}
+              columns={TABLE_COLUMNS}
+              rowKey="id"
+              caption="Active model performance statistics"
+              defaultSort={{ key: "requests", direction: "desc" }}
+            />
           </div>
-          <div className="flex items-center justify-between py-3.5">
-            <div>
-              <p className="font-medium text-foreground">
-                Internal Development Key
-              </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
-                sr-dev-3f2a...9c8d
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground">
-                Rate limit: 30 req/m
-              </span>
-              <Badge tone="success" size="sm">
-                Active
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </div>
+        )}
+      </section>
     </div>
   )
-}
-
-function SettingsSurface() {
-  return (
-    <div className="flex flex-col gap-6">
-      <SectionHeader
-        title="Gateway Settings"
-        description="Configure admin credentials, SQLite storage backups, and network parameters."
-        badge="System Config"
-      />
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-2 border-b border-border pb-3">
-            <Lock size={15} className="text-foreground" />
-            <span className="text-xs font-semibold text-foreground">
-              Admin Authentication
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            The admin password protects operator surfaces including key issuance
-            and database recovery.
-          </p>
-          <div className="mt-4">
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60"
-            >
-              Update Admin Password
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center gap-2 border-b border-border pb-3">
-            <Database size={15} className="text-foreground" />
-            <span className="text-xs font-semibold text-foreground">
-              Database Storage & Backup
-            </span>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Database location:{" "}
-            <code className="font-mono text-[11px] text-foreground">
-              $HOME/.srouter/srouter.db
-            </code>{" "}
-            (SQLite Schema Version 4).
-          </p>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/60"
-            >
-              Export Database
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Dashboard() {
-  const search = useSearch({ from: "/_authenticated" })
-  const activeTab: DashboardTab = search.tab ?? "overview"
-
-  switch (activeTab) {
-    case "overview":
-      return <OverviewSurface />
-    case "providers":
-      return <ProvidersSurface />
-    case "usage":
-      return <UsageSurface />
-    case "logs":
-      return <LogsSurface />
-    case "keys":
-      return <KeysSurface />
-    case "settings":
-      return <SettingsSurface />
-    default: {
-      const exhaustive: never = activeTab
-      throw new Error(`Unhandled tab: ${String(exhaustive)}`)
-    }
-  }
 }

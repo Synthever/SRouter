@@ -3,15 +3,13 @@ import {
   Cpu,
   KeyRound,
   LayoutDashboard,
-  PanelLeft,
   PanelLeftClose,
   Settings,
   Terminal,
 } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, type ComponentType } from "react"
 
 import { useAdminAuth } from "@/components/admin-auth-provider"
-import { Badge } from "@/components/arc/badge/badge"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { UserMenu } from "@/components/arc/user-menu/user-menu"
 import { useTheme } from "@/components/theme-provider"
@@ -22,11 +20,10 @@ export type DashboardTab =
 export interface NavItem {
   id: DashboardTab
   label: string
-  icon: React.ComponentType<{ size?: number; className?: string }>
-  badge?: string
+  icon: ComponentType<{ size?: number; className?: string }>
 }
 
-export const MAIN_NAV_ITEMS: NavItem[] = [
+const MAIN_NAV_ITEMS: NavItem[] = [
   {
     id: "overview",
     label: "Overview",
@@ -54,7 +51,7 @@ export const MAIN_NAV_ITEMS: NavItem[] = [
   },
 ]
 
-export const SYSTEM_NAV_ITEMS: NavItem[] = [
+const SYSTEM_NAV_ITEMS: NavItem[] = [
   {
     id: "settings",
     label: "Settings",
@@ -150,11 +147,6 @@ export function Sidebar({
         {!collapsed && (
           <span className="flex-1 truncate text-left">{item.label}</span>
         )}
-        {!collapsed && item.badge && (
-          <Badge tone="neutral" size="sm">
-            {item.badge}
-          </Badge>
-        )}
       </button>
     )
 
@@ -170,105 +162,79 @@ export function Sidebar({
   }
 
   const sidebarContent = (
-    <div className="bg-surface flex h-full flex-col justify-between overflow-hidden text-foreground">
+    <div className="bg-surface flex h-full flex-col overflow-hidden text-foreground">
       {/* Top Brand & Rail Toggle */}
-      <div>
-        <div
-          className={`flex h-14 items-center border-b border-border px-3.5 ${
-            collapsed ? "justify-center" : "justify-between"
-          }`}
-        >
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-              <GatewayMark />
-            </div>
-            {!collapsed && (
-              <div className="flex items-center gap-2 overflow-hidden">
-                <span className="truncate text-sm font-semibold tracking-tight text-foreground">
-                  SRouter
-                </span>
-                <Badge tone="neutral" size="sm">
-                  v0.2
-                </Badge>
-              </div>
-            )}
+      <div
+        className={`flex h-14 shrink-0 items-center border-b border-border px-3.5 ${
+          collapsed ? "justify-center" : "justify-between"
+        }`}
+      >
+        <div className="flex items-center gap-2.5 overflow-hidden">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
+            <GatewayMark />
           </div>
-
           {!collapsed && (
-            <Tooltip content="Collapse sidebar ([)" side="right">
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                aria-label="Collapse sidebar"
-                className="hidden size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground md:inline-flex"
-              >
-                <PanelLeftClose size={15} />
-              </button>
-            </Tooltip>
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+              SRouter
+            </span>
           )}
         </div>
 
-        {/* Navigation Sections */}
-        <div className="space-y-4 p-2.5">
-          <div className="space-y-1">
-            {!collapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                Gateway
-              </div>
-            )}
-            <div className="space-y-0.5">
-              {MAIN_NAV_ITEMS.map(renderNavItem)}
-            </div>
-          </div>
+        {!collapsed && (
+          <Tooltip content="Collapse sidebar ([)" side="right">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label="Collapse sidebar"
+              className="hidden size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground md:inline-flex"
+            >
+              <PanelLeftClose size={15} />
+            </button>
+          </Tooltip>
+        )}
+      </div>
 
-          <div className="space-y-1 border-t border-border/60 pt-1">
-            {!collapsed && (
-              <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                System
-              </div>
-            )}
-            <div className="space-y-0.5">
-              {SYSTEM_NAV_ITEMS.map(renderNavItem)}
+      {/* Navigation Sections */}
+      <div className="flex-1 space-y-4 overflow-y-auto p-2.5">
+        <div className="space-y-1">
+          {!collapsed && (
+            <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Gateway
             </div>
+          )}
+          <div className="space-y-0.5">{MAIN_NAV_ITEMS.map(renderNavItem)}</div>
+        </div>
+
+        <div className="space-y-1 border-t border-border/60 pt-1">
+          {!collapsed && (
+            <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              System
+            </div>
+          )}
+          <div className="space-y-0.5">
+            {SYSTEM_NAV_ITEMS.map(renderNavItem)}
           </div>
         </div>
       </div>
 
       {/* Operator Session Footer */}
-      <div className="border-t border-border p-2">
-        <div className="flex items-center justify-between">
-          <div className={collapsed ? "mx-auto" : "w-full"}>
-            <UserMenu
-              user={{
-                name: "Admin Operator",
-                email: "gateway-operator",
-                plan: "Master",
-              }}
-              status="available"
-              theme={theme}
-              onThemeChange={(next) => setTheme(next)}
-              showTheme
-              showName={!collapsed}
-              align={collapsed ? "center" : "start"}
-              onSignOut={async () => {
-                await logout.mutateAsync()
-                window.location.href = "/login"
-              }}
-            />
-          </div>
-
-          {collapsed && (
-            <Tooltip content="Expand sidebar ([)" side="right">
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                aria-label="Expand sidebar"
-                className="mx-auto mt-2 flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground"
-              >
-                <PanelLeft size={15} />
-              </button>
-            </Tooltip>
-          )}
+      <div className="shrink-0 border-t border-border p-2">
+        <div className={collapsed ? "flex justify-center" : "w-full"}>
+          <UserMenu
+            user={{
+              name: "Admin Operator",
+              email: "admin",
+            }}
+            theme={theme}
+            onThemeChange={(next) => setTheme(next)}
+            showTheme
+            showName={!collapsed}
+            align={collapsed ? "center" : "start"}
+            onSignOut={async () => {
+              await logout.mutateAsync()
+              window.location.href = "/login"
+            }}
+          />
         </div>
       </div>
     </div>
@@ -296,7 +262,7 @@ export function Sidebar({
 
       {/* Desktop Persistent Sidebar */}
       <aside
-        className={`bg-surface hidden shrink-0 flex-col border-r border-border transition-[width] duration-200 ease-in-out md:flex ${
+        className={`bg-surface hidden h-full shrink-0 flex-col border-r border-border transition-[width] duration-200 ease-in-out md:flex ${
           collapsed ? "w-14" : "w-60"
         }`}
       >

@@ -1,6 +1,5 @@
-import { Menu, PanelLeft, Search } from "lucide-react"
+import { Menu, PanelLeft } from "lucide-react"
 
-import { Badge } from "@/components/arc/badge/badge"
 import { ThemeSwitch } from "@/components/arc/theme-switch/theme-switch"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { useTheme } from "@/components/theme-provider"
@@ -76,33 +75,10 @@ export function Topbar({
             {TAB_TITLES[currentTab]}
           </span>
         </nav>
-
-        {/* Live Gateway Health Indicator */}
-        <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 sm:inline-flex dark:text-emerald-400">
-          <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-          <span>Gateway Online</span>
-        </div>
       </div>
 
-      {/* Right: Quick Command Search + Database Badge + Theme Switch */}
+      {/* Right: Theme Switch */}
       <div className="flex items-center gap-2.5">
-        {/* Quick Search Shortcut Trigger */}
-        <div
-          className="hidden items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground md:inline-flex"
-          role="search"
-        >
-          <Search size={13} className="text-muted-foreground" />
-          <span className="text-[11px]">Search gateway...</span>
-          <kbd className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-xs">
-            ⌘K
-          </kbd>
-        </div>
-
-        <Badge tone="neutral" size="sm" className="hidden lg:inline-flex">
-          SQLite Schema v4
-        </Badge>
-
-        {/* Theme Switcher using UIARC split variant */}
         <ThemeSwitch
           theme={isDark ? "dark" : "light"}
           variant="split"

@@ -311,7 +311,7 @@ function HeaderBar() {
   )
 }
 
-export function Login() {
+function Login() {
   const navigate = useNavigate()
   const { redirect } = useSearch({ from: "/login" })
   const { status, login, setup } = useAdminAuth()

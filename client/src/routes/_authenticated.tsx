@@ -2,16 +2,33 @@ import {
   createFileRoute,
   Outlet,
   redirect,
+  useLocation,
   useNavigate,
-  useSearch,
 } from "@tanstack/react-router"
 
 import { adminStatusQuery } from "@/api/admin"
 import { AppShell } from "@/components/layout/app-shell"
 import type { DashboardTab } from "@/components/layout/sidebar"
 
-export type AuthenticatedSearch = {
-  tab?: DashboardTab
+const TAB_ROUTES: Record<
+  DashboardTab,
+  "/" | "/providers" | "/usage" | "/logs" | "/keys" | "/settings"
+> = {
+  overview: "/",
+  providers: "/providers",
+  usage: "/usage",
+  logs: "/logs",
+  keys: "/keys",
+  settings: "/settings",
+}
+
+function getTabFromPathname(pathname: string): DashboardTab {
+  if (pathname.startsWith("/providers")) return "providers"
+  if (pathname.startsWith("/usage")) return "usage"
+  if (pathname.startsWith("/logs")) return "logs"
+  if (pathname.startsWith("/keys")) return "keys"
+  if (pathname.startsWith("/settings")) return "settings"
+  return "overview"
 }
 
 /**
@@ -20,18 +37,6 @@ export type AuthenticatedSearch = {
  * never flash unauthenticated content.
  */
 export const Route = createFileRoute("/_authenticated")({
-  validateSearch: (search: Record<string, unknown>): AuthenticatedSearch => {
-    const tab = typeof search.tab === "string" ? search.tab : undefined
-    if (
-      tab &&
-      ["overview", "providers", "usage", "logs", "keys", "settings"].includes(
-        tab
-      )
-    ) {
-      return { tab: tab as DashboardTab }
-    }
-    return {}
-  },
   beforeLoad: async ({ context, location }) => {
     const status = await context.queryClient.ensureQueryData(adminStatusQuery)
 
@@ -50,13 +55,12 @@ export const Route = createFileRoute("/_authenticated")({
 
 function AuthenticatedLayout() {
   const navigate = useNavigate()
-  const search = useSearch({ from: "/_authenticated" })
-  const currentTab: DashboardTab = search.tab ?? "overview"
+  const location = useLocation()
+  const currentTab: DashboardTab = getTabFromPathname(location.pathname)
 
   const handleSelectTab = (tab: DashboardTab) => {
     navigate({
-      to: "/",
-      search: tab === "overview" ? {} : { tab },
+      to: TAB_ROUTES[tab],
     })
   }
 

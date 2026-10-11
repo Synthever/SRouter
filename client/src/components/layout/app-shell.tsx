@@ -72,7 +72,7 @@ export function AppShell({ children, currentTab, onSelectTab }: AppShellProps) {
   }, [])
 
   return (
-    <div className="flex min-h-dvh w-full bg-background font-sans text-foreground">
+    <div className="flex h-dvh w-full overflow-hidden bg-background font-sans text-foreground">
       {/* Collapsible App Rail Sidebar */}
       <Sidebar
         collapsed={collapsed}
@@ -84,7 +84,7 @@ export function AppShell({ children, currentTab, onSelectTab }: AppShellProps) {
       />
 
       {/* Main Column */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar
           currentTab={currentTab}
           collapsed={collapsed}
