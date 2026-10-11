@@ -28,12 +28,12 @@ export function SectionHeader({
             </Badge>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-muted-foreground text-pretty">
+        <p className="mt-0.5 text-xs text-pretty text-muted-foreground">
           {description}
         </p>
       </div>
       {actions && (
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto sm:gap-2.5 shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:gap-2.5 sm:self-auto">
           {actions}
         </div>
       )}

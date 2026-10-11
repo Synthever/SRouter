@@ -162,7 +162,7 @@ export function Sidebar({
   }
 
   const sidebarContent = (
-    <div className="bg-surface flex h-full flex-col overflow-hidden text-foreground">
+    <div className="flex h-full flex-col overflow-hidden bg-surface text-foreground">
       {/* Top Brand & Rail Toggle */}
       <div
         className={`flex h-14 shrink-0 items-center border-b border-border px-3.5 ${
@@ -253,7 +253,7 @@ export function Sidebar({
 
       {/* Mobile Drawer */}
       <aside
-        className={`bg-surface fixed inset-y-0 left-0 z-50 w-64 transform border-r border-border transition-transform duration-200 ease-in-out md:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-border bg-surface transition-transform duration-200 ease-in-out md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -262,7 +262,7 @@ export function Sidebar({
 
       {/* Desktop Persistent Sidebar */}
       <aside
-        className={`bg-surface hidden h-full shrink-0 flex-col border-r border-border transition-[width] duration-200 ease-in-out md:flex ${
+        className={`hidden h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 ease-in-out md:flex ${
           collapsed ? "w-14" : "w-60"
         }`}
       >

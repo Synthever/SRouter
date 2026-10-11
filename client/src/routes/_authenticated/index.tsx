@@ -1,7 +1,14 @@
+import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
 import { Cpu, Download, Radio } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
+import {
+  analyticsQuery,
+  type AnalyticsWindow,
+  usageStatsQuery,
+  useLogEvents,
+} from "@/api/logs"
 import { Badge } from "@/components/arc/badge/badge"
 import { Button } from "@/components/arc/button/button"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
@@ -32,8 +39,8 @@ const RANGE_OPTIONS = [
 
 const CHART_SERIES: LineChartSeries[] = [
   {
-    key: "throughput",
-    label: "Tokens/sec",
+    key: "requests",
+    label: "Requests",
     area: true,
   },
   {
@@ -51,76 +58,51 @@ interface ModelMetricRow extends Record<string, unknown> {
   inputTokens: number
   outputTokens: number
   cachedRate: string
-  latency: number
   cost: number
 }
 
-const MODEL_DATA_24H: ModelMetricRow[] = [
-  {
-    id: "gpt-4o",
-    model: "gpt-4o",
-    provider: "OpenAI",
-    requests: 48920,
-    inputTokens: 18450000,
-    outputTokens: 7210000,
-    cachedRate: "42.1%",
-    latency: 165,
-    cost: 11.245,
-  },
-  {
-    id: "claude-3-5-sonnet",
-    model: "claude-3-5-sonnet",
-    provider: "Anthropic",
-    requests: 39180,
-    inputTokens: 14200000,
-    outputTokens: 6180000,
-    cachedRate: "58.4%",
-    latency: 182,
-    cost: 8.62,
-  },
-  {
-    id: "deepseek-chat",
-    model: "deepseek-chat",
-    provider: "DeepSeek",
-    requests: 18420,
-    inputTokens: 7120000,
-    outputTokens: 3410000,
-    cachedRate: "28.5%",
-    latency: 124,
-    cost: 1.84,
-  },
-  {
-    id: "gemini-1-5-flash",
-    model: "gemini-1.5-flash",
-    provider: "Google Gemini",
-    requests: 9840,
-    inputTokens: 3890000,
-    outputTokens: 1420000,
-    cachedRate: "19.2%",
-    latency: 98,
-    cost: 0.745,
-  },
-  {
-    id: "llama-3-2-local",
-    model: "llama3.2:3b",
-    provider: "Ollama Local",
-    requests: 2090,
-    inputTokens: 780000,
-    outputTokens: 390000,
-    cachedRate: "0.0%",
-    latency: 45,
-    cost: 0.0,
-  },
-]
+function inferProvider(model: string): string {
+  const lower = model.toLowerCase()
+  if (
+    lower.startsWith("gpt-") ||
+    lower.startsWith("o1") ||
+    lower.startsWith("o3") ||
+    lower.startsWith("text-embedding") ||
+    lower.startsWith("dall-e")
+  ) {
+    return "OpenAI"
+  }
+  if (lower.startsWith("claude")) {
+    return "Anthropic"
+  }
+  if (lower.startsWith("gemini")) {
+    return "Google Gemini"
+  }
+  if (lower.startsWith("deepseek")) {
+    return "DeepSeek"
+  }
+  if (lower.startsWith("grok")) {
+    return "xAI"
+  }
+  if (
+    lower.startsWith("qwen") ||
+    lower.startsWith("llama") ||
+    lower.startsWith("mistral") ||
+    lower.includes(":")
+  ) {
+    return "Local / Ollama"
+  }
+  return "Gateway"
+}
 
 const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
   {
     key: "model",
     label: "Model",
-    width: 170,
+    width: 180,
     sortable: true,
     render: (_val, row) => (
-      <span className="font-mono text-xs font-medium text-foreground whitespace-nowrap">
+      <span className="font-mono text-xs font-medium whitespace-nowrap text-foreground">
         {row.model}
       </span>
     ),
@@ -143,7 +125,7 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
     numeric: true,
     sortable: true,
     render: (_val, row) => (
-      <span className="text-foreground tabular-nums whitespace-nowrap">
+      <span className="whitespace-nowrap text-foreground tabular-nums">
         {row.requests.toLocaleString()}
       </span>
     ),
@@ -155,7 +137,7 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
     numeric: true,
     sortable: true,
     render: (_val, row) => (
-      <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+      <span className="whitespace-nowrap text-muted-foreground tabular-nums">
         {row.inputTokens.toLocaleString()}
       </span>
     ),
@@ -167,7 +149,7 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
     numeric: true,
     sortable: true,
     render: (_val, row) => (
-      <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+      <span className="whitespace-nowrap text-muted-foreground tabular-nums">
         {row.outputTokens.toLocaleString()}
       </span>
     ),
@@ -179,20 +161,8 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
     numeric: true,
     sortable: true,
     render: (_val, row) => (
-      <span className="font-medium text-emerald-600 tabular-nums dark:text-emerald-400 whitespace-nowrap">
+      <span className="font-medium whitespace-nowrap text-emerald-600 tabular-nums dark:text-emerald-400">
         {row.cachedRate}
-      </span>
-    ),
-  },
-  {
-    key: "latency",
-    label: "Latency",
-    width: 105,
-    numeric: true,
-    sortable: true,
-    render: (_val, row) => (
-      <span className="text-foreground tabular-nums whitespace-nowrap">
-        {row.latency} ms
       </span>
     ),
   },
@@ -203,198 +173,183 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
     numeric: true,
     sortable: true,
     render: (_val, row) => (
-      <span className="font-medium text-foreground tabular-nums whitespace-nowrap">
+      <span className="font-medium whitespace-nowrap text-foreground tabular-nums">
         ${row.cost.toFixed(4)}
       </span>
     ),
   },
 ]
 
-function getChartDataForRange(range: string): LineChartDatum[] {
-  if (range === "1h") {
-    return [
-      {
-        key: "t0",
-        label: "50m ago",
-        axisLabel: "10m",
-        values: { throughput: 640, latency: 135 },
-      },
-      {
-        key: "t1",
-        label: "40m ago",
-        axisLabel: "20m",
-        values: { throughput: 790, latency: 142 },
-      },
-      {
-        key: "t2",
-        label: "30m ago",
-        axisLabel: "30m",
-        values: { throughput: 920, latency: 128 },
-      },
-      {
-        key: "t3",
-        label: "20m ago",
-        axisLabel: "40m",
-        values: { throughput: 1150, latency: 132 },
-      },
-      {
-        key: "t4",
-        label: "10m ago",
-        axisLabel: "50m",
-        values: { throughput: 1320, latency: 125 },
-      },
-      {
-        key: "t5",
-        label: "Now",
-        axisLabel: "Now",
-        values: { throughput: 1240, latency: 128 },
-      },
-    ]
-  }
+export function OverviewPage() {
+  const [range, setRange] = useState<AnalyticsWindow>("24h")
 
-  if (range === "7d") {
-    return [
-      {
-        key: "d1",
-        label: "Mon",
-        axisLabel: "Mon",
-        values: { throughput: 880, latency: 162 },
-      },
-      {
-        key: "d2",
-        label: "Tue",
-        axisLabel: "Tue",
-        values: { throughput: 1040, latency: 155 },
-      },
-      {
-        key: "d3",
-        label: "Wed",
-        axisLabel: "Wed",
-        values: { throughput: 1250, latency: 148 },
-      },
-      {
-        key: "d4",
-        label: "Thu",
-        axisLabel: "Thu",
-        values: { throughput: 1410, latency: 140 },
-      },
-      {
-        key: "d5",
-        label: "Fri",
-        axisLabel: "Fri",
-        values: { throughput: 1320, latency: 144 },
-      },
-      {
-        key: "d6",
-        label: "Sat",
-        axisLabel: "Sat",
-        values: { throughput: 750, latency: 120 },
-      },
-      {
-        key: "d7",
-        label: "Sun",
-        axisLabel: "Sun",
-        values: { throughput: 820, latency: 125 },
-      },
-    ]
-  }
+  const { data: stats } = useQuery(usageStatsQuery)
+  const { data: analytics } = useQuery(analyticsQuery(range))
+  const { isConnected, status: sseStatus, lastLog } = useLogEvents()
 
-  // Default 24h
-  return [
-    {
-      key: "h00",
-      label: "00:00",
-      axisLabel: "00:00",
-      values: { throughput: 420, latency: 110 },
-    },
-    {
-      key: "h04",
-      label: "04:00",
-      axisLabel: "04:00",
-      values: { throughput: 310, latency: 98 },
-    },
-    {
-      key: "h08",
-      label: "08:00",
-      axisLabel: "08:00",
-      values: { throughput: 850, latency: 135 },
-    },
-    {
-      key: "h12",
-      label: "12:00",
-      axisLabel: "12:00",
-      values: { throughput: 1420, latency: 158 },
-    },
-    {
-      key: "h16",
-      label: "16:00",
-      axisLabel: "16:00",
-      values: { throughput: 1680, latency: 172 },
-    },
-    {
-      key: "h20",
-      label: "20:00",
-      axisLabel: "20:00",
-      values: { throughput: 1290, latency: 142 },
-    },
-    {
-      key: "h24",
-      label: "Current",
-      axisLabel: "Now",
-      values: { throughput: 1240, latency: 138 },
-    },
-  ]
-}
+  const totalRequests =
+    analytics?.total_requests ?? stats?.data.totals.requests.total ?? 0
+  const latencyP95 = analytics?.p95_latency_ms ?? 0
+  const requestVelocity = analytics?.requests_per_second ?? 0
+  const totalCost = stats?.data.totals.cost.total ?? 0
+  const windowCost =
+    analytics?.top_models.reduce((acc, m) => acc + (m.est_cost ?? 0), 0) ?? 0
+  const spendValue = windowCost > 0 ? windowCost : totalCost
 
-function OverviewPage() {
-  const [range, setRange] = useState<string>("24h")
-  const chartData = getChartDataForRange(range)
+  const chartData: LineChartDatum[] = useMemo(() => {
+    if (!analytics?.buckets || analytics.buckets.length === 0) {
+      return []
+    }
 
-  const requestCount =
-    range === "1h"
-      ? 4820
-      : range === "24h"
-        ? 118450
-        : range === "7d"
-          ? 824100
-          : 3410800
+    const buckets = analytics.buckets
+    const count = buckets.length
 
-  const latencyP50 =
-    range === "1h" ? 128 : range === "24h" ? 142 : range === "7d" ? 154 : 148
+    return buckets.map((bucket, index) => {
+      const date = new Date(bucket.bucket_start)
+      let label: string
+      let axisLabel: string | undefined
 
-  const tokenVelocity =
-    range === "1h" ? 840 : range === "24h" ? 1240 : range === "7d" ? 1180 : 1310
+      if (range === "1h") {
+        label = date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+        if (index % 12 === 0 || index === count - 1) {
+          axisLabel = label
+        }
+      } else if (range === "24h") {
+        label = date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+        if (index % 4 === 0 || index === count - 1) {
+          axisLabel = label
+        }
+      } else if (range === "7d") {
+        label = `${date.toLocaleDateString([], { weekday: "short" })} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+        if (index % 4 === 0 || index === count - 1) {
+          axisLabel = date.toLocaleDateString([], { weekday: "short" })
+        }
+      } else {
+        label = date.toLocaleDateString([], { month: "short", day: "numeric" })
+        if (index % 5 === 0 || index === count - 1) {
+          axisLabel = label
+        }
+      }
 
-  const spendCost =
-    range === "1h"
-      ? 2.4
-      : range === "24h"
-        ? 24.18
-        : range === "7d"
-          ? 168.4
-          : 724.8
+      return {
+        key: String(bucket.bucket_start),
+        label,
+        axisLabel,
+        values: {
+          requests: bucket.total_requests,
+          latency: Math.round(bucket.avg_latency_ms ?? 0),
+        },
+      }
+    })
+  }, [analytics, range])
+
+  const modelRows: ModelMetricRow[] = useMemo(() => {
+    if (analytics?.top_models && analytics.top_models.length > 0) {
+      return analytics.top_models.map((item) => {
+        const modelName = item.model ?? "unknown"
+        const statMatch = stats?.data.by_model.find(
+          (m) => m.model === modelName
+        )
+        const inputTokens = statMatch?.total_input_tokens ?? 0
+        const outputTokens = statMatch?.total_output_tokens ?? 0
+        const cachedTokens = statMatch?.total_cached_tokens ?? 0
+        const totalPrompt = inputTokens + cachedTokens
+        const cachedRate =
+          totalPrompt > 0
+            ? `${((cachedTokens / totalPrompt) * 100).toFixed(1)}%`
+            : "0.0%"
+
+        return {
+          id: modelName,
+          model: modelName,
+          provider: inferProvider(modelName),
+          requests: item.total_requests,
+          inputTokens:
+            inputTokens > 0 ? inputTokens : Math.round(item.total_tokens * 0.7),
+          outputTokens:
+            outputTokens > 0
+              ? outputTokens
+              : Math.round(item.total_tokens * 0.3),
+          cachedRate,
+          cost:
+            typeof item.est_cost === "number"
+              ? item.est_cost
+              : (statMatch?.est_cost ?? 0),
+        }
+      })
+    }
+
+    if (stats?.data.by_model && stats.data.by_model.length > 0) {
+      return stats.data.by_model.map((item) => {
+        const totalPrompt = item.total_input_tokens + item.total_cached_tokens
+        const cachedRate =
+          totalPrompt > 0
+            ? `${((item.total_cached_tokens / totalPrompt) * 100).toFixed(1)}%`
+            : "0.0%"
+
+        return {
+          id: item.model,
+          model: item.model,
+          provider: inferProvider(item.model),
+          requests: item.total_requests,
+          inputTokens: item.total_input_tokens,
+          outputTokens: item.total_output_tokens,
+          cachedRate,
+          cost: item.est_cost ?? 0,
+        }
+      })
+    }
+
+    return []
+  }, [analytics, stats])
 
   const handleExport = () => {
+    const exportPayload = {
+      exported_at: new Date().toISOString(),
+      window: range,
+      analytics,
+      stats,
+    }
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+      type: "application/json",
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `srouter-telemetry-${range}-${Date.now()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
     toast.success("Telemetry report exported")
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6 min-w-0 max-w-full overflow-hidden">
+    <div className="flex max-w-full min-w-0 flex-col gap-5 overflow-hidden sm:gap-6">
       <SectionHeader
         title="Gateway overview"
         description="Live operational telemetry, model routing status, and traffic throughput."
-        badge="Cluster healthy"
+        badge={
+          isConnected
+            ? "Live stream active"
+            : sseStatus === "connecting"
+              ? "Connecting..."
+              : "Stream idle"
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             <SegmentedControl
               options={RANGE_OPTIONS}
               value={range}
-              onValueChange={setRange}
+              onValueChange={(val) => setRange(val as AnalyticsWindow)}
             />
             <Button variant="secondary" size="sm" onClick={handleExport}>
               <Download size={14} aria-hidden="true" />
-              <span className="hidden xs:inline sm:inline">Export</span>
-              <span className="inline xs:hidden sm:hidden">Export</span>
+              <span>Export</span>
             </Button>
           </div>
         }
@@ -402,52 +357,61 @@ function OverviewPage() {
 
       {/* KPI Row using UIARC MetricCard */}
       <section
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4"
         aria-label="Key gateway telemetry numbers"
       >
         <MetricCard
           label="Total requests"
-          value={requestCount}
-          change="+14.2%"
-          context="vs previous period"
+          value={totalRequests}
+          context={
+            stats?.data.totals.requests.failed
+              ? `${stats.data.totals.requests.failed} failures recorded`
+              : `Window: past ${range}`
+          }
         />
         <MetricCard
-          label="Response latency"
-          value={latencyP50}
+          label="P95 latency"
+          value={latencyP95}
           suffix=" ms"
-          change="-8.5%"
-          context="median upstream time"
+          context="upstream response time"
         />
         <MetricCard
-          label="Token velocity"
-          value={tokenVelocity}
-          suffix=" t/s"
-          change="+22.1%"
-          context="streaming throughput"
+          label="Request velocity"
+          value={requestVelocity}
+          suffix=" req/s"
+          decimals={2}
+          context="average throughput"
         />
         <MetricCard
           label="Estimated spend"
-          value={spendCost}
+          value={spendValue}
           prefix="$"
-          decimals={2}
-          change="+5.4%"
-          context="catalog billed total"
+          decimals={4}
+          context={
+            windowCost > 0
+              ? "window estimated cost"
+              : (stats?.data.totals.cost.label ?? "catalog billed total")
+          }
         />
       </section>
 
       {/* Traffic Trend Section using UIARC LineChart */}
       <section
-        className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs min-w-0"
+        className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5"
         aria-label="Gateway throughput over time"
       >
-        <div className="mb-4 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3">
+        <div className="mb-4 flex flex-col gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <Radio size={15} className="text-foreground shrink-0" aria-hidden="true" />
+            <Radio
+              size={15}
+              className="shrink-0 text-foreground"
+              aria-hidden="true"
+            />
             <h2 className="text-xs font-semibold tracking-tight text-foreground">
               Throughput and latency trends
             </h2>
           </div>
-          <span className="font-mono text-[11px] sm:text-xs text-muted-foreground">
+          <span className="font-mono text-[11px] text-muted-foreground sm:text-xs">
             {range === "1h"
               ? "Window: past 60 minutes"
               : range === "24h"
@@ -471,30 +435,43 @@ function OverviewPage() {
 
       {/* Model Breakdown Section using UIARC SortableDataTable */}
       <section
-        className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-xs min-w-0"
+        className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-xs sm:p-5"
         aria-label="Top active models"
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
           <div className="flex items-center gap-2">
-            <Cpu size={15} className="text-foreground shrink-0" aria-hidden="true" />
+            <Cpu
+              size={15}
+              className="shrink-0 text-foreground"
+              aria-hidden="true"
+            />
             <h2 className="text-xs font-semibold tracking-tight text-foreground">
               Model performance breakdown
             </h2>
           </div>
-          <Badge tone="neutral" size="sm">
-            5 models active
-          </Badge>
+          <div className="flex items-center gap-2">
+            {lastLog && (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                Latest: {lastLog.model ?? "request"} ({lastLog.status_code})
+              </span>
+            )}
+            <Badge tone="neutral" size="sm">
+              {modelRows.length === 1
+                ? "1 model active"
+                : `${modelRows.length} models active`}
+            </Badge>
+          </div>
         </div>
 
-        {MODEL_DATA_24H.length === 0 ? (
+        {modelRows.length === 0 ? (
           <EmptyState
-            title="No model metrics recorded"
-            description="Active proxy statistics will populate as completions are routed."
+            title="No requests recorded yet"
+            description="Proxy telemetry and active model performance will populate automatically as completions are routed through SRouter."
           />
         ) : (
           <div className="w-full min-w-0">
             <SortableDataTable
-              rows={MODEL_DATA_24H}
+              rows={modelRows}
               columns={TABLE_COLUMNS}
               rowKey="id"
               caption="Active model performance statistics"
