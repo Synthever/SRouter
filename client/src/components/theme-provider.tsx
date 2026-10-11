@@ -76,6 +76,17 @@ function isEditableTarget(target: EventTarget | null) {
   return false
 }
 
+type ViewTransition = {
+  ready: Promise<void>
+  finished: Promise<void>
+}
+
+type DocumentWithViewTransition = Document & {
+  startViewTransition?: (
+    updateCallback: () => void | Promise<void>
+  ) => ViewTransition
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
@@ -92,6 +103,9 @@ export function ThemeProvider({
     return defaultTheme
   })
 
+  const isMountedRef = React.useRef(false)
+  const currentThemeRef = React.useRef<ResolvedTheme | null>(null)
+
   const setTheme = React.useCallback(
     (nextTheme: Theme) => {
       localStorage.setItem(storageKey, nextTheme)
@@ -105,15 +119,40 @@ export function ThemeProvider({
       const root = document.documentElement
       const resolvedTheme =
         nextTheme === "system" ? getSystemTheme() : nextTheme
-      const restoreTransitions = disableTransitionOnChange
-        ? disableTransitionsTemporarily()
-        : null
 
-      root.classList.remove("light", "dark")
-      root.classList.add(resolvedTheme)
+      const prevResolvedTheme = currentThemeRef.current
+      currentThemeRef.current = resolvedTheme
 
-      if (restoreTransitions) {
-        restoreTransitions()
+      const updateDOM = () => {
+        const restoreTransitions = disableTransitionOnChange
+          ? disableTransitionsTemporarily()
+          : null
+
+        root.classList.remove("light", "dark")
+        root.classList.add(resolvedTheme)
+        root.setAttribute("data-theme", resolvedTheme)
+
+        if (restoreTransitions) {
+          restoreTransitions()
+        }
+      }
+
+      // Skip view transition animation on initial page load or if theme didn't actually change
+      if (!isMountedRef.current || prevResolvedTheme === resolvedTheme) {
+        isMountedRef.current = true
+        updateDOM()
+        return
+      }
+
+      const doc = document as DocumentWithViewTransition
+      const supportsViewTransition =
+        typeof doc.startViewTransition === "function" &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+      if (supportsViewTransition) {
+        doc.startViewTransition(updateDOM)
+      } else {
+        updateDOM()
       }
     },
     [disableTransitionOnChange]

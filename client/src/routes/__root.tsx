@@ -4,6 +4,10 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools"
 
 import { AdminAuthProvider } from "@/components/admin-auth-provider"
+import {
+  ToastStack,
+  ToastStackProvider,
+} from "@/components/arc/toast-stack/toast-stack"
 import { ThemeProvider } from "@/components/theme-provider"
 
 export type RouterContext = {
@@ -31,7 +35,10 @@ const RootComponent = () => (
   // `["admin", "status"]` entry.
   <ThemeProvider>
     <AdminAuthProvider>
-      <Outlet />
+      <ToastStackProvider>
+        <Outlet />
+        <ToastStack position="top-right" />
+      </ToastStackProvider>
     </AdminAuthProvider>
     {import.meta.env.DEV ? (
       <>

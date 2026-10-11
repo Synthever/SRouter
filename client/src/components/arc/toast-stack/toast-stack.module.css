@@ -1,0 +1,310 @@
+/*
+ * toast-stack.module.css — UIARC toast stack styles.
+ * Fixed viewport, stacked cards, fanning list, and swipe dismissal.
+ */
+
+/* The region only holds the list; it never blocks clicks outside the toasts themselves. */
+.viewport {
+  position: fixed;
+  z-index: 9999;
+  width: min(24rem, calc(100% - var(--space-6, 1.5rem)));
+  pointer-events: none;
+}
+
+.bottom-right { bottom: var(--space-6, 1.5rem); right: var(--space-6, 1.5rem); }
+.bottom-left { bottom: var(--space-6, 1.5rem); left: var(--space-6, 1.5rem); }
+.bottom-center { bottom: var(--space-6, 1.5rem); right: 0; left: 0; margin-inline: auto; }
+.top-right { top: var(--space-6, 1.5rem); right: var(--space-6, 1.5rem); }
+.top-left { top: var(--space-6, 1.5rem); left: var(--space-6, 1.5rem); }
+.top-center { top: var(--space-6, 1.5rem); right: 0; left: 0; margin-inline: auto; }
+
+.contained { position: absolute; z-index: 2; }
+.contained.bottom-right { bottom: var(--space-4, 1rem); right: var(--space-4, 1rem); }
+.contained.bottom-left { bottom: var(--space-4, 1rem); left: var(--space-4, 1rem); }
+.contained.top-right { top: var(--space-4, 1rem); right: var(--space-4, 1rem); }
+.contained.top-left { top: var(--space-4, 1rem); left: var(--space-4, 1rem); }
+
+@media (max-width: 32rem) {
+  .viewport:not(.contained) {
+    right: 0;
+    left: 0;
+    margin-inline: auto;
+    width: calc(100% - var(--space-4, 1rem));
+  }
+  .top-right,
+  .top-center,
+  .top-left {
+    top: var(--space-3, 0.75rem);
+  }
+  .bottom-right,
+  .bottom-center,
+  .bottom-left {
+    bottom: var(--space-3, 0.75rem);
+  }
+}
+
+/* Toasts hang from the list. Its height covers the gaps between open toasts. */
+.list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: auto;
+}
+
+/* Tucked toasts scale from their edge. */
+.item {
+  position: absolute;
+  right: 0;
+  left: 0;
+  transform-origin: 50% 0;
+}
+
+.item-bottom {
+  bottom: 0;
+  transform-origin: 50% 100%;
+}
+
+.item-top {
+  top: 0;
+  transform-origin: 50% 0;
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel, 0.75rem);
+  background: var(--surface-raised, var(--card));
+  color: var(--foreground);
+  box-shadow: var(--shadow-raised, 0 8px 24px -4px rgba(0, 0, 0, 0.12));
+  container-type: inline-size;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--duration-standard, 200ms) var(--ease-standard, ease),
+    border-color var(--duration-standard, 200ms) var(--ease-standard, ease);
+}
+
+.dark .card {
+  background: var(--surface, #141416);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 36px -6px rgba(0, 0, 0, 0.65);
+}
+
+.item[data-front="true"] .card,
+.item[data-expanded="true"] .card {
+  box-shadow: var(--shadow-floating, 0 16px 36px -6px rgba(0, 0, 0, 0.2));
+}
+
+.dark .item[data-front="true"] .card,
+.dark .item[data-expanded="true"] .card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 20px 48px -8px rgba(0, 0, 0, 0.75);
+}
+
+/* Tucked toasts sit a step back in tone as well as scale. */
+.item[data-front="false"][data-expanded="false"] .card {
+  background: var(--surface-muted, var(--muted));
+}
+
+.dark .item[data-front="false"][data-expanded="false"] .card {
+  background: #18181b;
+}
+
+.card[data-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-3, 0.75rem) var(--space-3, 0.75rem) var(--space-4, 1rem);
+}
+
+.icon {
+  position: relative;
+  display: grid;
+  width: 18px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  color: var(--text-muted);
+  transition: color var(--duration-fast, 150ms) var(--ease-standard, ease);
+}
+
+.icon[data-type="success"] { color: #10a870; }
+.icon[data-type="info"] { color: var(--accent, #3b82f6); }
+.icon[data-type="warning"] { color: #eab308; }
+.icon[data-type="error"] { color: var(--danger, #ef4444); }
+
+.glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+
+.glyph svg {
+  display: block;
+}
+
+/* The spinner turns only while something is loading */
+.spinner {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border: 1.75px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-pill, 9999px);
+  animation: spin 0.8s linear infinite;
+}
+
+.copy {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  font-size: var(--text-sm, 0.875rem);
+  letter-spacing: var(--tracking-body, -0.01em);
+  line-height: 20px;
+}
+
+.title {
+  position: relative;
+  display: block;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.line {
+  display: block;
+}
+
+.description {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted, var(--muted-foreground));
+  font-size: 0.8125rem;
+}
+
+/* Action and close buttons */
+.actionSlot {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.actionSlot[data-moving="true"] {
+  overflow: hidden;
+}
+
+.action,
+.close {
+  flex: none;
+  border: 1px solid transparent;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    scale var(--duration-spring, 300ms) var(--ease-spring, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-standard, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-standard, ease),
+    color var(--duration-fast, 150ms) var(--ease-standard, ease);
+}
+
+.action {
+  height: 28px;
+  padding: 0 var(--space-3, 0.75rem);
+  border-color: var(--border);
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin: -4px -2px 0 0;
+  place-items: center;
+  border-radius: var(--radius-pill, 9999px);
+  background: transparent;
+  color: var(--text-muted, var(--muted-foreground));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .action:hover {
+    border-color: var(--border-strong, var(--foreground));
+    background: var(--surface-muted, var(--muted));
+  }
+  .close:hover {
+    background: var(--surface-muted, var(--muted));
+    color: var(--foreground);
+  }
+}
+
+.action:active,
+.close:active {
+  scale: 0.96;
+}
+
+.action:focus-visible,
+.close:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 1px;
+}
+
+/* A narrow toast keeps its copy wide: the action drops under the copy */
+@container (max-width: 21rem) {
+  .content {
+    flex-wrap: wrap;
+    row-gap: var(--space-2, 0.5rem);
+  }
+  .actionSlot {
+    order: 1;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-top: 0;
+    padding-left: calc(18px + var(--space-3, 0.75rem));
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .icon,
+  .action,
+  .close {
+    transition: none;
+  }
+  .action:active,
+  .close:active {
+    scale: none;
+  }
+  .spinner {
+    animation: none;
+  }
+}

@@ -128,3 +128,82 @@
     @apply font-sans;
   }
 }
+
+/* View Transition: Symmetrical split from center seam (UIARC theme-switch split) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+  animation: theme-split 0.48s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes theme-split {
+  from {
+    clip-path: inset(0 50% 0 50%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+
+/* Orbit loop animations for background rings */
+@keyframes ring-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ring-orbit-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.ring-orbit-hero {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-orbit 24s linear infinite;
+  will-change: transform;
+}
+
+.ring-orbit-inner {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-orbit-reverse 16s linear infinite;
+  will-change: transform;
+}
+
+.ring-orbit-outer {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-orbit 36s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  .ring-orbit-hero,
+  .ring-orbit-inner,
+  .ring-orbit-outer {
+    animation: none !important;
+  }
+}
+
+

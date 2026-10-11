@@ -8,10 +8,7 @@ import { ErrorCode, type ErrorEnvelope, type HTTPMethod } from "./types"
  * rather than an `Exclude` blacklist on purpose: a verb the server later gains
  * stays unreachable until it is added here deliberately.
  */
-type RequestMethod = Extract<
-  HTTPMethod,
-  "GET" | "POST" | "PATCH" | "DELETE"
->
+type RequestMethod = Extract<HTTPMethod, "GET" | "POST" | "PATCH" | "DELETE">
 
 /**
  * Every failure the API reports carries the `ErrorEnvelope` shape, so callers
@@ -35,7 +32,9 @@ export class APIError extends Error {
 
   /** The session is gone or was never established. Callers redirect to login. */
   get isUnauthenticated() {
-    return this.status === 401 && this.code === ErrorCode.authentication_required
+    return (
+      this.status === 401 && this.code === ErrorCode.authentication_required
+    )
   }
 }
 
