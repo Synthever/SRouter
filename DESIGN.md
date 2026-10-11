@@ -56,6 +56,6 @@ out of the way.
 
 ## Reference
 
-`client/src/routes/auth/login.tsx` is the existing screen that already uses these
+`client/src/routes/login.tsx` is the existing screen that already uses these
 tokens (`--surface`, `--border`, `--radius-surface`, `--text-xl`, `--tracking-body`).
 New shell work matches its token usage.

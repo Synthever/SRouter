@@ -26,15 +26,23 @@ client/src/
 │   ├── __root.tsx           root layout; owns the queryClient singleton
 │   ├── _authenticated.tsx   pathless session guard (beforeLoad)
 │   ├── _authenticated/
-│   │   └── index.tsx        "/" — placeholder dashboard with sign-out
-│   └── login.tsx            "/login" — setup + sign-in
+│   │   ├── index.tsx        "/" — overview dashboard (wired: usageStatsQuery, analyticsQuery, SSE useLogEvents)
+│   │   ├── keys.tsx         API keys — STATIC MOCKUP (hardcoded fake keys)
+│   │   ├── logs.tsx         request logs — STATIC MOCKUP
+│   │   ├── providers.tsx    providers — STATIC MOCKUP
+│   │   ├── settings.tsx     settings — STATIC MOCKUP
+│   │   └── usage.tsx        usage/quota — STATIC MOCKUP (hardcoded token counts)
+│   └── login.tsx            "/login" — setup + sign-in (wired)
 ├── api/
 │   ├── client.ts            request<T>() and APIError — the only fetch wrapper
 │   ├── admin.ts             adminStatusQuery + setupAdmin/loginAdmin/logoutAdmin
+│   ├── logs.ts              usageStatsQuery, analyticsQuery(window), useLogEvents (SSE)
 │   └── types.ts             re-export shim for the generated wire types
 ├── components/
-│   ├── ui/                  shadcn primitives (currently just button.tsx)
-│   ├── gauge/               self-contained SVG gauge kit (currently unreferenced)
+│   ├── arc/                 UIARC kit — primary visual vocabulary (CSS modules + foundation.css tokens)
+│   ├── ui/                  shadcn primitives (Base UI): alert, button, field, input, label, separator, textarea, …
+│   ├── gauge/               self-contained SVG gauge kit
+│   ├── layout/              app-shell, sidebar, topbar, section-header
 │   ├── admin-auth-provider.tsx  admin session context: status query + auth mutations
 │   └── theme-provider.tsx   dark/light/system context
 ├── generated/               GENERATED (specta) — do not edit anything here

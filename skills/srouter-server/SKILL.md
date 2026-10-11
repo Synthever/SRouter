@@ -98,7 +98,7 @@ There is no CI — the full suite is a manual pre-push obligation.
 - **Acronyms stay capitalised: `APIError`, `APIKey`, `HTTPMethod`, `OAuthSession`, `SQLxAPIKeyStore`.** This is the house style across the crate, not `ApiError`/`HttpMethod` as upstream Rust guidance would suggest — `clippy` does not flag it here, and the generated `typed.ts` carries the name through verbatim, so renaming one type changes a wire-visible identifier. Match the neighbours rather than the style guide.
 - **Five traits exist in the whole crate.** Do not add another abstraction, generic, or registry until a second concrete caller exists.
 - **Match the file.** Read the surrounding lines before adding to a module; the naming and comment style in this crate are deliberate.
-- **`//!` comments explain why and cite the Node oracle** (`apps/api/src/...:line`). Match that; do not narrate what the next line does.
+- **`//!` comments explain why — not what.** They historically cited the deleted Node oracle (`apps/api/src/...:line`); those citations are now historical pointers (the code lives on `backup/pre-apps-api-removal`). Do not add new oracle citations, and do not narrate what the next line does.
 - **A rename lands every callsite in the same diff.** No shims or re-exports.
 
 ## References

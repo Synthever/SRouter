@@ -15,7 +15,7 @@ metadata:
 
 Work inside `client/`. The dashboard is the operator UI for the SRouter gateway; the Rust server in `server/` owns every wire shape, status code, and cookie.
 
-**Current state:** only two screens exist — `/login` (first-run setup + sign-in) and `/` (a placeholder under the session gate, with sign-out). Everything else the API supports is unbuilt. Do not assume a screen exists because a type exists. The session itself is shared through `components/admin-auth-provider.tsx` (`useAdminAuth()`).
+**Current state:** two kinds of screens. **Wired to the API:** `/login` (first-run setup + sign-in) and `/` (the overview dashboard — `useQuery` on `usageStatsQuery`/`analyticsQuery` from `@/api/logs`, plus live SSE via `useLogEvents`). **Static mockups with hardcoded figures:** `keys`, `logs`, `providers`, `settings`, `usage` under `_authenticated/` — they render plausible fake data (fake key prefixes, invented token counts) and must not be mistaken for working data paths. Do not assume a screen exists — or that it is wired — because a type exists. The session itself is shared through `components/admin-auth-provider.tsx` (`useAdminAuth()`).
 
 ## When to Use
 
@@ -70,8 +70,8 @@ If a generated file must be touched at all, generate it, then `git diff` it to c
 - **Routes are thin.** A route file declares `createFileRoute`, validates search params, and renders a component. Data orchestration belongs in `client/src/api/`, not in the route body.
 - **Protected screens go under `client/src/routes/_authenticated/`**, never at the routes root — that is where the session gate lives.
 - **Server state is TanStack Query only.** Declare a `queryOptions()` factory next to its endpoint in `client/src/api/<domain>.ts`; local UI state is `useState`. No `useEffect` + `fetch`.
-- **Errors are inline, not toasted.** No toast library is installed. Render the message where the action happened, and branch on `APIError.status`/`.code` — never on message text.
-- **Reuse before adding.** `client/src/components/ui/` (shadcn, Base UI) and `client/src/components/gauge/` are the vocabulary. Adding a charting or component dependency for something these already cover is the wrong move.
+- **Errors are toasted through the in-house stack.** `toast.error(...)`/`toast.success(...)` from `@/components/arc/toast-stack/toast-stack` — the provider and the stack itself are mounted once in `routes/__root.tsx`. No third-party toast library is installed; never add one. Branch on `APIError.status`/`.code`, never on message text.
+- **Reuse before adding.** Three vocabularies already exist: `client/src/components/arc/` (UIARC kit — the primary visual vocabulary: button, badge, metric-card, sortable-data-table, toast-stack, theme-switch, animated-counter, line-chart, … over CSS modules and `foundation.css` tokens), `client/src/components/ui/` (shadcn on Base UI), and `client/src/components/gauge/` (SVG dials). Visual direction is owned by the repo root `DESIGN.md` (ENERGY 1 / RHYTHM 1 / MOTION 2, Inter, one `--accent`, tokens from `foundation.css`) — apply it, do not invent a new one. Adding a charting or component dependency for something these already cover is the wrong move.
 - **Serial, not clever.** The formatter is prettier with the Tailwind plugin: no semicolons, double quotes, 80 columns. Do not reformat unrelated code.
 
 ## Verification

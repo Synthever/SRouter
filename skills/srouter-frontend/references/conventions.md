@@ -188,7 +188,7 @@ No form library is installed. The pattern is the login screen's:
 
 ## Errors and states
 
-- No toast library and no error boundary. Render errors inline, next to the action, as `text-destructive text-xs`.
+- No error boundary. Field validation errors render inline, next to the action, as `text-destructive text-xs`. Action-level feedback (mutation errors, confirmations) goes through the in-house `toast` from `@/components/arc/toast-stack/toast-stack`, mounted in `routes/__root.tsx`.
 - Map errors to a sentence with a local `describe(error)` helper that branches on `instanceof APIError`, then `status` (e.g. `429`), then falls back to `error.message`.
 - Handle `isPending` and `isError` explicitly — never render `undefined` from `data` and call it a state.
 - Primitive-level failures throw (`throw new Error("useTheme must be used within a ThemeProvider")`); recoverable ones return UI.
