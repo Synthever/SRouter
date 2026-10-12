@@ -129,8 +129,13 @@ const fadeFast = {
 /** Room above the top gridline, and the gap between the crosshair and its tooltip. */
 const TOP = 12,
   GAP = 14
+/** Series 1 is `--series-1`, not `--accent`: the accent token is also a shadcn
+ * hover-surface token, so a stylesheet that redefines it to a near-white leaves
+ * the line invisible on a light card. `--series-1` is the contrast-validated
+ * chart palette from `foundation.css`, derived from the accent at a readable
+ * lightness in both themes. */
 const PALETTE = [
-  "var(--accent)",
+  "var(--series-1)",
   "color-mix(in oklab, var(--foreground) 46%, var(--surface))",
   "color-mix(in oklab, var(--foreground) 26%, var(--surface))",
 ]

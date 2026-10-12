@@ -43,7 +43,7 @@ export function Topbar({
           type="button"
           onClick={onOpenMobile}
           aria-label="Open navigation drawer"
-          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden pointer-coarse:size-11"
         >
           <Menu size={18} />
         </button>
@@ -55,7 +55,7 @@ export function Topbar({
               type="button"
               onClick={onToggleCollapse}
               aria-label="Expand sidebar"
-              className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:inline-flex"
+              className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:inline-flex pointer-coarse:size-11"
             >
               <PanelLeft size={17} />
             </button>

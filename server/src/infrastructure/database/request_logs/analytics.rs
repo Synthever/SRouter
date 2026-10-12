@@ -257,10 +257,24 @@ impl AnalyticsBucket {
 #[derive(Debug, Serialize, specta::Type)]
 pub struct AnalyticsTopModel {
     pub model: Option<String>,
+    /// The provider the gateway actually routed these requests to, taken from
+    /// `request_logs.provider_id`. The client renders this column directly; it
+    /// must not infer a vendor from the model name, which guesses wrong for
+    /// every model whose name does not carry its vendor prefix.
+    pub provider_id: String,
     #[specta(type = specta_typescript::Number)]
     pub total_requests: i64,
     #[specta(type = specta_typescript::Number)]
     pub total_tokens: i64,
+    /// The prompt side of those tokens, which is the denominator of the cache
+    /// column: cached reads are a subset of it, while `total_tokens` also
+    /// carries the completion and would shrink the rate as answers lengthen.
+    #[specta(type = specta_typescript::Number)]
+    pub prompt_tokens: i64,
+    /// Prompt cache reads, so the table can report a hit rate for this window
+    /// instead of pairing a windowed request count with all-time tokens.
+    #[specta(type = specta_typescript::Number)]
+    pub cached_tokens: i64,
     pub est_cost: f64,
 }
 
@@ -297,6 +311,10 @@ pub struct AnalyticsReport {
     pub error_rate: f64,
     #[specta(type = specta_typescript::Number)]
     pub p95_latency_ms: i64,
+    /// Estimated spend over the same window the buckets cover. The all-time
+    /// total lives in `GET /v1/logs/stats`; mixing the two in one KPI row would
+    /// label a lifetime figure with the selected window.
+    pub est_cost: f64,
     pub buckets: Vec<AnalyticsBucket>,
     pub top_models: Vec<AnalyticsTopModel>,
     pub top_agents: Vec<AnalyticsTopAgent>,
@@ -379,9 +397,11 @@ pub async fn analytics_report(
     };
 
     let model_rows = sqlx::query(
-        "SELECT model, COUNT(*) AS total_requests, SUM(total_tokens) AS total_tokens, \
-         SUM(estimated_cost) AS est_cost FROM request_logs WHERE created_at >= ? \
-         GROUP BY model ORDER BY total_requests DESC LIMIT 10",
+        "SELECT model, provider_id, COUNT(*) AS total_requests, SUM(total_tokens) AS total_tokens, \
+         SUM(prompt_tokens) AS prompt_tokens, \
+         SUM(cached_tokens) AS cached_tokens, SUM(estimated_cost) AS est_cost \
+         FROM request_logs WHERE created_at >= ? \
+         GROUP BY model, provider_id ORDER BY total_requests DESC LIMIT 10",
     )
     .bind(since)
     .fetch_all(&pool)
@@ -397,12 +417,33 @@ pub async fn analytics_report(
         .map(|row| {
             Ok(AnalyticsTopModel {
                 model: row.try_get("model").map_err(log_row_error)?,
+                provider_id: row.try_get("provider_id").map_err(log_row_error)?,
                 total_requests: row.try_get("total_requests").map_err(log_row_error)?,
                 total_tokens: row.try_get("total_tokens").map_err(log_row_error)?,
+                prompt_tokens: row.try_get("prompt_tokens").map_err(log_row_error)?,
+                cached_tokens: row
+                    .try_get::<Option<i64>, _>("cached_tokens")
+                    .map_err(log_row_error)?
+                    .unwrap_or(0),
                 est_cost: row.try_get("est_cost").map_err(log_row_error)?,
             })
         })
         .collect::<Result<Vec<_>, APIError>>()?;
+    // The KPI row and this table both describe the selected window, so the
+    // estimated spend is summed over the same window the buckets cover.
+    let window_cost: f64 = sqlx::query_scalar::<_, Option<f64>>(
+        "SELECT SUM(estimated_cost) FROM request_logs WHERE created_at >= ?",
+    )
+    .bind(since)
+    .fetch_one(&pool)
+    .await
+    .map_err(|error| {
+        APIError::new(
+            500,
+            constants::database::could_not_aggregate_request_logs(&error),
+        )
+    })?
+    .unwrap_or(0.0);
 
     let agent_rows = sqlx::query(
         "SELECT COALESCE(user_agent, 'Unknown') AS user_agent, COUNT(*) AS total_requests, \
@@ -506,6 +547,7 @@ pub async fn analytics_report(
         total_requests,
         error_rate,
         p95_latency_ms,
+        est_cost: window_cost,
         buckets,
         top_models,
         top_agents,

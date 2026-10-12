@@ -55,7 +55,11 @@
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
+  /* Cards use the ARC surface token, not a second white: the KPI cards and these
+     panels sit side by side, and two near-identical greys read as a mistake.
+     `--card` is what `bg-card` resolves to; `--surface` is what the ARC
+     components use. */
+  --card: var(--surface);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
@@ -89,7 +93,11 @@
   --surface-raised: oklch(1 0 0);
   --surface-muted: oklch(0.97 0 0);
   --text-secondary: oklch(0.46 0 0);
-  --text-muted: oklch(0.59 0 0);
+  /* 0.59 measured 4.11:1 on the white surface, under the 4.5:1 floor for body
+     text; it also carries table headers and chart ticks. 0.54 clears both the
+     surface (5.06:1) and the muted surface (4.75:1). foundation.css holds the
+     same value, so the two copies cannot drift. */
+  --text-muted: oklch(0.54 0 0);
   --success: oklch(49% 0.19 150);
   --warning: oklch(58% 0.18 75);
   --danger: oklch(54% 0.21 25);
@@ -98,7 +106,8 @@
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  /* Same rule as the light block: one card colour, taken from the ARC surface. */
+  --card: var(--surface);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);

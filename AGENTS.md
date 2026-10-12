@@ -163,3 +163,17 @@ Pricing snapshot maintenance (Python 3 stdlib, not a required dev step): `python
 - Frozen contracts a change must keep green: `server/tests/bindings.rs` (generated TS), `server/tests/schema.rs` (`user_version = 4`, newer refused), `server/tests/http_runtime.rs` (six frozen response headers incl. `X-Version`), `server/tests/database.rs` (`DATABASE_URL` refused before any SQLite file is touched). Route tests pin status codes and error bodies, so the contract is the Rust types + tests — there is no separate contract document to update.
 - Stated policy (`CONTRIBUTING.md`): Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `perf:`, `chore:`), imperative subject, and say what you ran in the PR description.
 - Security constraints to respect (`SECURITY.md`): provider credentials are cleartext JSON inside the SQLite file and in exports — treat the DB like a `.env`; gateway keys store only sha256 + prefix (unrecoverable); request logs keep metadata only, never prompt/completion text; report vulnerabilities privately to `security@srouter.web.id`, never via a public issue.
+
+<!-- antislop:start -->
+## antislop
+
+For UI, copy, people, mobile layout, or code comments work, read the core (`~/.agents/skills/antislop/SKILL.md`) and then the skill for the task:
+
+- UI / visual: `~/.agents/skills/antislop-ui/SKILL.md`
+- Copy & text: `~/.agents/skills/antislop-copywriting/SKILL.md`
+- People (contrast, keyboard, states): `~/.agents/skills/antislop-human/SKILL.md`
+- Mobile / responsive: `~/.agents/skills/antislop-layoutmobile/SKILL.md`
+- Code comments: `~/.agents/skills/antislop-code/SKILL.md`
+
+`DESIGN.md` is the direction (identity, dials, palette); antislop is the filter on top of it. Both are read before any interface change. Audits are written to `anti-slop/audit-NNN-YYYY-MM-DD.md`.
+<!-- antislop:end -->

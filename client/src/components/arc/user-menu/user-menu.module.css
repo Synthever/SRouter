@@ -14,6 +14,12 @@
   .trigger[data-name] { padding-right: 4px; }
   .triggerName, .chevron { display: none; }
 }
+/* The trigger is the whole hit area for the account menu, so it takes the 44px
+   floor under a thumb. Keyed to the pointer, not the width: a touch laptop gets
+   the larger target at any window size. */
+@media (pointer: coarse) {
+  .trigger { height: 44px; }
+}
 
 .face { position: relative; display: inline-grid; width: var(--face-size); height: var(--face-size); flex: none; }
 .face[data-size="sm"] { --face-size: 32px; --dot-size: 11px; }

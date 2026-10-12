@@ -89,6 +89,12 @@ export type AnalyticsReport = {
 	total_requests: number,
 	error_rate: number | null,
 	p95_latency_ms: number,
+	/**
+	 *  Estimated spend over the same window the buckets cover. The all-time
+	 *  total lives in `GET /v1/logs/stats`; mixing the two in one KPI row would
+	 *  label a lifetime figure with the selected window.
+	 */
+	est_cost: number | null,
 	buckets: AnalyticsBucket[],
 	top_models: AnalyticsTopModel[],
 	top_agents: AnalyticsTopAgent[],
@@ -104,8 +110,26 @@ export type AnalyticsTopAgent = {
 
 export type AnalyticsTopModel = {
 	model: string | null,
+	/**
+	 *  The provider the gateway actually routed these requests to, taken from
+	 *  `request_logs.provider_id`. The client renders this column directly; it
+	 *  must not infer a vendor from the model name, which guesses wrong for
+	 *  every model whose name does not carry its vendor prefix.
+	 */
+	provider_id: string,
 	total_requests: number,
 	total_tokens: number,
+	/**
+	 *  The prompt side of those tokens, which is the denominator of the cache
+	 *  column: cached reads are a subset of it, while `total_tokens` also
+	 *  carries the completion and would shrink the rate as answers lengthen.
+	 */
+	prompt_tokens: number,
+	/**
+	 *  Prompt cache reads, so the table can report a hit rate for this window
+	 *  instead of pairing a windowed request count with all-time tokens.
+	 */
+	cached_tokens: number,
 	est_cost: number | null,
 };
 

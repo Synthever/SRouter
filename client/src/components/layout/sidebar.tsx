@@ -123,7 +123,7 @@ export function Sidebar({
           onSelectTab(item.id)
           onCloseMobile()
         }}
-        className={`group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-medium tracking-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-foreground ${
+        className={`group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-medium tracking-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-foreground pointer-coarse:py-3 ${
           isActive
             ? "bg-foreground/8 font-semibold text-foreground dark:bg-white/10"
             : "text-muted-foreground hover:bg-foreground/4 hover:text-foreground dark:hover:bg-white/5"
@@ -186,7 +186,7 @@ export function Sidebar({
               type="button"
               onClick={onToggleCollapse}
               aria-label="Collapse sidebar"
-              className="hidden size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground md:inline-flex"
+              className="hidden size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground md:inline-flex pointer-coarse:size-11"
             >
               <PanelLeftClose size={15} />
             </button>

@@ -355,6 +355,16 @@ async fn logs_analytics_bucket_aggregates_and_orders_top_models() {
     let first = &top_models[0];
     assert_eq!(first["model"], "analytics-test-model-a");
     assert_eq!(first["total_requests"], 2);
+    // The provider column is served from the log's own `provider_id`; the client
+    // renders it as-is instead of guessing a vendor from the model name.
+    assert_eq!(first["provider_id"], "openai");
+    assert_eq!(first["cached_tokens"], 0);
+    // The cache column divides by the prompt side, which is a different sum
+    // from `total_tokens` (2 rows x 10 prompt tokens), so it rides on the row.
+    assert_eq!(first["prompt_tokens"], 20);
+    // The window's spend is reported on the report itself, so the KPI row and
+    // this table cannot disagree about their time range.
+    assert!(body["est_cost"].is_number());
 
     let providers: Vec<&str> = body["providers"]
         .as_array()
