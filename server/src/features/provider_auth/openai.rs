@@ -232,17 +232,25 @@ async fn import_token(State(state): State<AppState>, body: Bytes) -> Result<Resp
     let email = id_token
         .as_deref()
         .and_then(email_from_token)
-        .or_else(|| email_from_token(&access_token));
+        .or_else(|| email_from_token(&access_token))
+        .or_else(|| payload.get("user").and_then(|u| text_field(u, "email")));
     let name = text_field(&payload, "name")
         .or(email)
         .unwrap_or_else(|| unnamed_account(timestamp));
 
+    let account_id = text_field(&payload, "accountId")
+        .or_else(|| text_field(&payload, "account_id"))
+        .or_else(|| payload.get("account").and_then(|a| text_field(a, "id")))
+        .or_else(|| id_token.as_deref().and_then(account_id_from_token))
+        .or_else(|| account_id_from_token(&access_token));
+
     let tokens = CodexTokens {
         access_token,
         refresh_token: text_field(&payload, "refreshToken")
-            .or_else(|| text_field(&payload, "refresh_token")),
-        account_id: text_field(&payload, "accountId")
-            .or_else(|| text_field(&payload, "account_id")),
+            .or_else(|| text_field(&payload, "refresh_token"))
+            .or_else(|| text_field(&payload, "sessionToken"))
+            .or_else(|| text_field(&payload, "session_token")),
+        account_id,
         expires_at_ms: None,
         email: None,
     };

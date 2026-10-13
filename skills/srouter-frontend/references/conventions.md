@@ -153,6 +153,8 @@ export function describe(error: unknown): string { … }
 
 - Function components only; `StrictMode` is on, so effects run twice in dev — an effect that is not idempotent is a bug, not a dev-only quirk.
 - Named exports for components (`export function ThemeProvider`, `export { Button, buttonVariants }`). Route files export a `Route` const, which is the one exception.
+- **Single-export hooks/utilities MUST use `export default` only.** When a hook file (typically in `hooks/*`) or single-purpose utility exports only one function/item, it is strictly required to use `export default` only. **It is forbidden to have both named export and default export** (do not write `export function useX` alongside `export default useX`). Callers import it without braces (`import useClipboard from "@/hooks/useClipboard"`).
+- **Multiple-export hooks/modules MUST use named `export` only.** When a file exports more than one item (multiple hooks or functions), use named exports only (`export function useA`, `export function useB`), and do not use `export default`. Callers import them with braces (`import { useA, useB } from "@/hooks/use..."`).
 - Props are a `type` above the component; spread-through components keep the primitive's props and add variants (`ButtonPrimitive.Props & VariantProps<typeof buttonVariants>`).
 - Forward a `data-slot="<name>"` attribute on wrapped primitives, matching the shadcn output.
 - Derived state beats duplicated state. Guard clauses over nested conditionals. No `useEffect` + `fetch` — that is what TanStack Query is for.
@@ -177,15 +179,22 @@ export function describe(error: unknown): string { … }
 - shadcn components are generated over **Base UI**, so composition uses Base UI's `render` prop — not Radix's `asChild`.
 - `src/components/arc/` (UIARC) is the primary visual vocabulary. Arc components use **CSS modules + CSS variables, not Tailwind classes**, and their tokens live in `components/arc/foundation.css` (`--surface`, `--surface-muted`, `--text-secondary`, `--radius-*`, `--space-*`; theme via `data-theme="light|dark"` on `<html>`, not the `.dark` class the Tailwind tokens use). Screens compose the two idioms — Arc for chrome and controls, Tailwind utilities for page layout — and each stays inside its own rules. Docs: <https://uiarc.dev/llms.txt>.
 - `src/components/gauge/` is a self-contained SVG kit (arcs, ticks, needle, tooltip, spring animation) with a barrel export at `components/gauge/index.ts`. It has zero imports today — reuse it for dials and meters instead of adding a chart library.
+- **A button that runs an action MUST use `ActionButton`** from `@/components/arc/action-button/action-button` (default export) — never a `ui/Button` plus a hand-rolled `useState` pending flag. Hand it `label` + `onAction` (sync or `async`) and it owns the idle → pending → success → error state machine, the press spring, and the `aria-busy` / `role="status"` announcements; tune it with `successLabel`, `pendingLabel`, `resetAfterMs`, `onActionError`, `shortcut`. Reserve `ui/Button` strictly for controls with no action to report (navigation, toggles, dialog triggers).
+- **Copy operations MUST use `useClipboard` (`hooks/useClipboard.ts`), never `navigator.clipboard` directly.** When you need clipboard or copy logic inside a flow, hook, or component, it is mandatory to take `useClipboard` from `@/hooks/useClipboard` (it wraps Arc's `useCopyFeedback` and adds paste — see `useOAuthFlow`); for a standalone copy control, `CopyButton` (`@/components/arc/copy-button/copy-button`) is the ready component. Either way `navigator.clipboard` is reached only inside `use-copy-feedback`, so the "Copied"/error window and permission handling stay single-owner.
 
 ## Forms
 
-No form library is installed. The pattern is the login screen's:
+No external form library (like TanStack Form or React Hook Form) is installed. To avoid unnecessary dependencies and adhere to repository rules (zero new dependencies), forms use native React primitives:
 
-- `useState` per field, controlled inputs.
-- `onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}` — auth mutations come from `useAdminAuth()`; navigation rides in as a per-call `{ onSuccess }` callback.
-- Validation inline and derived (`const mismatch = confirmation !== password`), with the submit button `disabled` while invalid or pending.
-- The submit button carries the pending label (`"Working…"`) rather than a separate spinner.
+- **Controlled inputs (`useState` per field)**: The simple pattern used on the login screen.
+  - `onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}` — auth mutations come from `useAdminAuth()`; navigation rides in as a per-call `{ onSuccess }` callback.
+  - Validation inline and derived (`const mismatch = confirmation !== password`), with the submit button `disabled` while invalid or pending.
+  - The submit button carries the pending label (`"Working…"`) or uses `ActionButton`.
+
+- **Grouped forms & submit status with `useActionState` (React 19 built-in)**:
+  - For handling grouped form fields and form submit status (`pending`, `error`, result state) without any external library (hindari library eksternal seperti TanStack Form), use React 19's built-in `useActionState` from `"react"`.
+  - `const [state, formAction, isPending] = useActionState(actionFn, initialState)` manages the entire submission lifecycle natively.
+  - Zero new dependencies added — 100% compliant with the repository's dependency constraints.
 
 ## Errors and states
 
@@ -196,15 +205,30 @@ No form library is installed. The pattern is the login screen's:
 
 ## Naming
 
-| Thing           | Convention                 | Example                                       |
-| --------------- | -------------------------- | --------------------------------------------- |
-| Files           | kebab-case                 | `theme-provider.tsx`, `use-animated-value.ts` |
-| Components      | PascalCase, named export   | `GaugeTooltip`, `Button`                      |
-| Hooks           | `use-` file, `useX` export | `use-animated-value.ts` → `useAnimatedValue`  |
-| Query factories | `xQuery`                   | `adminStatusQuery`                            |
-| Types           | PascalCase                 | `LoginSearch`, `GaugeFit`                     |
-| Route IDs       | the file path              | `createFileRoute("/_authenticated/keys")`     |
-| Local helpers   | verb phrase, lowercase     | `describe`, `afterAuth`, `isEditableTarget`   |
+| Thing           | Convention               | Example                                           |
+| --------------- | ------------------------ | ------------------------------------------------- |
+| Files           | kebab-case               | `theme-provider.tsx`, `token-form-panel.tsx`      |
+| Directories     | kebab-case               | `arc/floating-field/`, `arc/sortable-data-table/` |
+| Components      | PascalCase, named export | `GaugeTooltip`, `Button`                          |
+| Hooks           | `useX.ts`, `useX` export | `useOAuthFlow.ts` → `useOAuthFlow`                |
+| Query factories | `xQuery`                 | `adminStatusQuery`                                |
+| Types           | PascalCase               | `LoginSearch`, `GaugeFit`                         |
+| Route IDs       | the file path            | `createFileRoute("/_authenticated/keys")`         |
+| Local helpers   | verb phrase, lowercase   | `describe`, `afterAuth`, `isEditableTarget`       |
+| Acronyms / ID   | uppercase, never mixed case | `useAPIKey`, `providerID`, `keyID`            |
+
+A folder that holds one feature's panels, hook, and logic behind a single name takes PascalCase (`modals/ConnectAccounts/`); its files stay kebab-case, and every other folder stays kebab-case.
+
+**Hook export rules (`hooks/*`)**:
+- **Single export:** Saat export-nya hanya satu, WAJIB menggunakan `export default` saja. Dilarang ada dua (dilarang ada named `export` dan `export default` sekaligus dalam satu file). Di-import tanpa kurung kurawal: `import useX from "@/hooks/useX"`.
+- **Multiple exports:** Saat export-nya lebih dari satu, WAJIB menggunakan named `export` saja (`export function useA()`, `export function useB()`), dan dilarang menggunakan `export default`. Di-import dengan kurung kurawal: `import { useA, useB } from "@/hooks/..."`.
+
+**Acronyms and ID casing: `API` and `ID` must be uppercase.**
+Acronyms and identifiers must stay in uppercase across everything you write — hooks, variables, types, props, components:
+- If it has "Api", it must be **`API`** (never `Api`): e.g. `useAPIKey`, `APIError`, `APIResponse`, `APIKeyStore`.
+- If it has "id" / "Id", it must be **`ID`** (never `Id` or lowercase `id` in camelCase/PascalCase identifiers): e.g. `providerID` (never `providerId`), `keyID` (never `keyId`), `userID` (never `userId`), `modelID` (never `modelId`).
+
+The exception is wire field names, which are frozen and lowercase exactly as the server sends them (`id`, `provider_id`, `key_prefix`); the local variable holding one still takes the caps form, so `const providerID = row.provider_id`.
 
 ## Comments
 

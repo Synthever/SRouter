@@ -14,7 +14,7 @@
 | Icons        | `@hugeicons/react` + `@hugeicons/core-free-icons` | the declared `iconLibrary`                                             |
 | Font         | Inter Variable, `@fontsource-variable/inter`      | mapped to `--font-sans` and `--font-heading`                           |
 
-`components.json` also aliases `@/hooks`, but **no `src/hooks/` directory exists** — that alias is a shadcn target, not an existing folder.
+`components.json` also aliases `@/hooks`, where application hooks reside (e.g. `client/src/hooks/useClipboard.ts`).
 
 ## Directory map
 
@@ -29,17 +29,23 @@ client/src/
 │   │   ├── index.tsx        "/" — overview dashboard (wired: usageStatsQuery, analyticsQuery, SSE useLogEvents)
 │   │   ├── keys.tsx         API keys — STATIC MOCKUP (hardcoded fake keys)
 │   │   ├── logs.tsx         request logs — STATIC MOCKUP
-│   │   ├── providers.tsx    providers — STATIC MOCKUP
+│   │   ├── providers/       providers management screens
 │   │   ├── settings.tsx     settings — STATIC MOCKUP
 │   │   └── usage.tsx        usage/quota — STATIC MOCKUP (hardcoded token counts)
 │   └── login.tsx            "/login" — setup + sign-in (wired)
+├── hooks/
+│   └── useClipboard.ts      mandatory hook for copy/clipboard access (wraps Arc useCopyFeedback, adds paste)
 ├── api/
 │   ├── client.ts            request<T>() and APIError — the only fetch wrapper
 │   ├── admin.ts             adminStatusQuery + setupAdmin/loginAdmin/logoutAdmin
 │   ├── logs.ts              usageStatsQuery, analyticsQuery(window), useLogEvents (SSE)
+│   ├── providers.ts         providers queries and mutations
 │   └── types.ts             re-export shim for the generated wire types
 ├── components/
 │   ├── arc/                 UIARC kit — primary visual vocabulary (CSS modules + foundation.css tokens)
+│   │   ├── action-button/   ActionButton — mandatory component for any button running an action
+│   │   ├── copy-button/     CopyButton — standalone copy control
+│   │   └── ...
 │   ├── ui/                  shadcn primitives (Base UI): alert, button, field, input, label, separator, textarea, …
 │   ├── gauge/               self-contained SVG gauge kit
 │   ├── layout/              app-shell, sidebar, topbar, section-header

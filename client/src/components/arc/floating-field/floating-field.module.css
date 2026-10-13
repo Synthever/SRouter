@@ -1,0 +1,157 @@
+.field {
+  display: grid;
+  min-width: 0;
+  position: relative;
+}
+
+.shell {
+  position: relative;
+  display: flex;
+  min-height: 2.875rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control, 0.5rem);
+  padding: 0 0.875rem;
+  background: var(--surface, var(--card, #ffffff));
+  transition:
+    border-color 150ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:global(.dark) .shell {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .shell:hover:not(:focus-within) {
+    border-color: color-mix(in oklab, var(--foreground) 35%, var(--border));
+  }
+  :global(.dark) .shell:hover:not(:focus-within) {
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+}
+
+.shell:focus-within {
+  border-color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--foreground);
+}
+
+:global(.dark) .shell:focus-within {
+  border-color: #ffffff;
+  box-shadow: 0 0 0 1px #ffffff;
+}
+
+.shell[data-has-end-action="true"] {
+  padding-right: 2.75rem;
+}
+
+.shell[data-has-start-icon="true"] {
+  padding-left: 2.5rem;
+}
+
+.startIcon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.floatingLabel {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  transform-origin: left center;
+  color: var(--muted-foreground, #71717a);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1;
+  pointer-events: none;
+  padding: 0 0.25rem;
+  border-radius: 2px;
+  background: transparent;
+  user-select: none;
+  z-index: 2;
+  transition:
+    transform 150ms cubic-bezier(0.2, 0, 0, 1),
+    top 150ms cubic-bezier(0.2, 0, 0, 1),
+    color 150ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 150ms cubic-bezier(0.2, 0, 0, 1),
+    font-weight 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.shell[data-has-start-icon="true"] .floatingLabel {
+  left: 2.25rem;
+}
+
+.shell[data-floating="true"] .floatingLabel,
+.shell:focus-within .floatingLabel,
+.input:focus ~ .floatingLabel,
+.input:not(:placeholder-shown) ~ .floatingLabel,
+.input:-webkit-autofill ~ .floatingLabel {
+  top: 0;
+  transform: translateY(-50%) scale(0.82);
+  color: var(--foreground);
+  background: var(--surface, var(--card, #ffffff));
+  font-weight: 500;
+  left: 0.75rem !important;
+}
+
+:global(.dark) .shell[data-floating="true"] .floatingLabel,
+:global(.dark) .shell:focus-within .floatingLabel,
+:global(.dark) .input:focus ~ .floatingLabel,
+:global(.dark) .input:not(:placeholder-shown) ~ .floatingLabel,
+:global(.dark) .input:-webkit-autofill ~ .floatingLabel {
+  background: var(--card, #18181b);
+  color: #f0f0f0;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  outline: 0;
+  z-index: 1;
+  padding: 0;
+}
+
+.input::placeholder {
+  color: transparent;
+}
+
+.input:focus::placeholder {
+  color: var(--muted-foreground, #71717a);
+  opacity: 0.6;
+}
+
+.endAction {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.hint {
+  display: block;
+  padding-top: 0.375rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
