@@ -55,7 +55,6 @@ export default function useAPIKey({
   return {
     apiKey,
     setAPIKey,
-    setApiKey: setAPIKey,
     prefix,
     setPrefix,
     pending,

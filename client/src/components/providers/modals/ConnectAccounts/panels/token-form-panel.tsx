@@ -21,12 +21,19 @@ export function TokenFormPanel({
   // The dropzone is a clickable div rather than a label, so it needs the input
   // element to open the picker. The ref stays here, where the input is rendered.
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // The submit button owns the action, so the form only forwards Enter-key
+  // submits to it. Without this the button's own click and the form's submit
+  // both fire and the token is imported twice.
+  const submitButtonRef = useRef<HTMLButtonElement>(null)
 
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        void flow.importToken()
+        const submitter = (event.nativeEvent as SubmitEvent)?.submitter
+        if (submitter !== submitButtonRef.current) {
+          submitButtonRef.current?.click()
+        }
       }}
       className="space-y-3"
     >
@@ -160,6 +167,7 @@ export function TokenFormPanel({
       </div>
 
       <ActionButton
+        ref={submitButtonRef}
         type="submit"
         label="Import token & connect"
         pendingLabel="Importing token…"

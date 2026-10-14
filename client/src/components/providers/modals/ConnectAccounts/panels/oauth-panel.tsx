@@ -1,4 +1,5 @@
 import { ExternalLink, Info, ShieldCheck, X, Clipboard } from "lucide-react"
+import { useRef } from "react"
 
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Button } from "@/components/arc/button/button"
@@ -22,6 +23,11 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
     complete,
     reset,
   } = flow
+
+  // The submit button owns the action, so the form only forwards Enter-key
+  // submits to it. Without this the button's own click and the form's submit
+  // both fire and the callback is exchanged twice.
+  const submitButtonRef = useRef<HTMLButtonElement>(null)
 
   if (!oauthData) {
     return (
@@ -56,7 +62,10 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        void complete()
+        const submitter = (event.nativeEvent as SubmitEvent)?.submitter
+        if (submitter !== submitButtonRef.current) {
+          submitButtonRef.current?.click()
+        }
       }}
       className="space-y-3.5 rounded-xl border border-border/80 bg-surface-muted/30 p-4"
     >
@@ -136,6 +145,7 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
 
       <div className="flex items-center gap-2 pt-1">
         <ActionButton
+          ref={submitButtonRef}
           type="submit"
           label="Confirm & connect"
           pendingLabel="Verifying…"

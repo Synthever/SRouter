@@ -2,7 +2,6 @@ import type { ComponentProps } from "react"
 
 export interface ProviderLogoProps extends ComponentProps<"svg"> {
   providerID?: string
-  providerId?: string
   size?: number
 }
 
@@ -12,12 +11,11 @@ export interface ProviderLogoProps extends ComponentProps<"svg"> {
  */
 export function ProviderLogo({
   providerID,
-  providerId,
   size = 20,
   className = "",
   ...props
 }: ProviderLogoProps) {
-  const normalized = (providerID ?? providerId ?? "").toLowerCase()
+  const normalized = (providerID ?? "").toLowerCase()
 
   if (normalized.includes("codex") || normalized.includes("openai")) {
     return (

@@ -219,6 +219,10 @@ No external form library (like TanStack Form or React Hook Form) is installed. T
 
 A folder that holds one feature's panels, hook, and logic behind a single name takes PascalCase (`modals/ConnectAccounts/`); its files stay kebab-case, and every other folder stays kebab-case.
 
+**`{arc, ui, gauge}` under `components/` are off-limits.** Never edit, rename, or move anything inside `components/arc/`, `components/ui/`, or `components/gauge/`. All three are library code (`ui/` is shadcn, `arc/` is UIARC, `gauge/` is the sanctioned SVG kit), so their file names, directory names, and exported identifiers are frozen. Touch them only when the task is explicitly about that component, and keep every existing name even then.
+
+**Everywhere else under `components/`, exported identifiers are PascalCase.** In `components/layout/`, `components/providers/`, and the root files (`theme-provider.tsx`, `admin-auth-provider.tsx`), a component, hook, context, or type is PascalCase: `AppShell`, `SectionHeader`, `Sidebar`, `Topbar`, `ProviderLogo`, `APIKeyPanel`, `OAuthPanel`, `TokenFormPanel`, `ConnectAccountModal`, `useAdminAuth`. Apply it to new code; do not rename an existing identifier just to comply unless the task asks for that rename.
+
 **Hook export rules (`hooks/*`)**:
 - **Single export:** Saat export-nya hanya satu, WAJIB menggunakan `export default` saja. Dilarang ada dua (dilarang ada named `export` dan `export default` sekaligus dalam satu file). Di-import tanpa kurung kurawal: `import useX from "@/hooks/useX"`.
 - **Multiple exports:** Saat export-nya lebih dari satu, WAJIB menggunakan named `export` saja (`export function useA()`, `export function useB()`), dan dilarang menggunakan `export default`. Di-import dengan kurung kurawal: `import { useA, useB } from "@/hooks/..."`.

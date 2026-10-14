@@ -195,7 +195,7 @@ function ProvidersListPage() {
                 {/* Left side: Vendor logo box + Titles */}
                 <div className="flex min-w-0 items-center gap-3.5 pr-2">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-surface-muted text-foreground shadow-2xs">
-                    <ProviderLogo providerId={provider.id} size={20} />
+                    <ProviderLogo providerID={provider.id} size={20} />
                   </div>
 
                   <div className="flex min-w-0 flex-col">

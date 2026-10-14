@@ -6,6 +6,7 @@ import {
   Info,
   X,
 } from "lucide-react"
+import { useRef } from "react"
 
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Button } from "@/components/arc/button/button"
@@ -20,11 +21,19 @@ type TokenRawPanelProps = {
 export function TokenRawPanel({ flow }: TokenRawPanelProps) {
   const { rawInput, setRawInput, rawParsed, pending } = flow
 
+  // The submit button owns the action, so the form only forwards Enter-key
+  // submits to it. Without this the button's own click and the form's submit
+  // both fire and the token is imported twice.
+  const submitButtonRef = useRef<HTMLButtonElement>(null)
+
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        void flow.importRaw()
+        const submitter = (event.nativeEvent as SubmitEvent)?.submitter
+        if (submitter !== submitButtonRef.current) {
+          submitButtonRef.current?.click()
+        }
       }}
       className="space-y-3"
     >
@@ -121,6 +130,7 @@ export function TokenRawPanel({ flow }: TokenRawPanelProps) {
 
       <div className="flex items-center gap-2 pt-1">
         <ActionButton
+          ref={submitButtonRef}
           type="submit"
           label="Import Raw & Connect"
           pendingLabel="Importing…"

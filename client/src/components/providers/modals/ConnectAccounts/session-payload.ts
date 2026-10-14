@@ -38,7 +38,6 @@ type JwtClaims = {
 export type ParsedSession = {
   accessToken: string
   accountID: string
-  accountId: string
   refreshToken: string
   name: string
 }
@@ -73,11 +72,9 @@ function withTokenClaims(session: ParsedSession): ParsedSession {
   if (!claims) return session
 
   const { accountID, name } = identityFromClaims(claims)
-  const resolvedAccountID = session.accountID || session.accountId || accountID
   return {
     ...session,
-    accountID: resolvedAccountID,
-    accountId: resolvedAccountID,
+    accountID: session.accountID || accountID,
     name: session.name || name,
   }
 }
@@ -93,7 +90,6 @@ export function parseSessionPayload(text: string): ParsedSession | null {
     return withTokenClaims({
       accessToken: trimmed,
       accountID: "",
-      accountId: "",
       refreshToken: "",
       name: "",
     })
@@ -115,7 +111,6 @@ export function parseSessionPayload(text: string): ParsedSession | null {
   return withTokenClaims({
     accessToken,
     accountID: resolvedAccountID,
-    accountId: resolvedAccountID,
     refreshToken:
       dump.refreshToken || dump.refresh_token || dump.sessionToken || "",
     name: dump.user?.email || dump.user?.name || dump.name || "",

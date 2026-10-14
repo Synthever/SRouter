@@ -22,7 +22,7 @@ export default function useOAuthFlow({
   const [oauthData, setOauthData] = useState<OAuthLoginResult | null>(null)
   const [callbackInput, setCallbackInput] = useState("")
   const [pending, setPending] = useState(false)
-  const { copied, copy, paste } = useClipboard()
+  const { paste } = useClipboard()
 
   async function start() {
     setPending(true)
@@ -40,15 +40,6 @@ export default function useOAuthFlow({
     } finally {
       setPending(false)
     }
-  }
-
-  async function copyAuthorizeUrl() {
-    if (!oauthData?.authorize_url) return
-    if (await copy(oauthData.authorize_url)) {
-      toast.success("Authorization link copied")
-      return
-    }
-    toast.error("Failed to copy link")
   }
 
   async function pasteCallback() {
@@ -101,10 +92,8 @@ export default function useOAuthFlow({
     oauthData,
     callbackInput,
     setCallbackInput,
-    copied,
     pending,
     start,
-    copyAuthorizeUrl,
     pasteCallback,
     complete,
     reset,

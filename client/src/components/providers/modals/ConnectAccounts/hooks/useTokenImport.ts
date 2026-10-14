@@ -277,10 +277,7 @@ export default function useTokenImport({
     setAccessToken: (accessToken: string) =>
       dispatch({ type: "SET_ACCESS_TOKEN", payload: accessToken }),
     accountID: state.accountID,
-    accountId: state.accountID,
     setAccountID: (accountID: string) =>
-      dispatch({ type: "SET_ACCOUNT_ID", payload: accountID }),
-    setAccountId: (accountID: string) =>
       dispatch({ type: "SET_ACCOUNT_ID", payload: accountID }),
     refreshToken: state.refreshToken,
     setRefreshToken: (refreshToken: string) =>

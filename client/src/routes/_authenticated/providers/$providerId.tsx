@@ -158,7 +158,7 @@ function ProviderDetailPage() {
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex size-13 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-foreground shadow-2xs">
-            <ProviderLogo providerId={provider.id} size={28} />
+            <ProviderLogo providerID={provider.id} size={28} />
           </div>
 
           <div className="flex flex-col">

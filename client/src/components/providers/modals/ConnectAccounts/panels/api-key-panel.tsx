@@ -1,4 +1,5 @@
 import { KeyRound } from "lucide-react"
+import { useRef } from "react"
 
 import ActionButton from "@/components/arc/action-button/action-button"
 import { FloatingField } from "@/components/arc/floating-field/floating-field"
@@ -16,11 +17,19 @@ export function APIKeyPanel({
   connectionName,
   onConnectionNameChange,
 }: APIKeyPanelProps) {
+  // The submit button owns the action, so the form only forwards Enter-key
+  // submits to it. Without this the button's own click and the form's submit
+  // both fire and the request goes out twice.
+  const submitButtonRef = useRef<HTMLButtonElement>(null)
+
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault()
-        void flow.save()
+        const submitter = (event.nativeEvent as SubmitEvent)?.submitter
+        if (submitter !== submitButtonRef.current) {
+          submitButtonRef.current?.click()
+        }
       }}
       className="space-y-3.5 pt-1"
     >
@@ -52,6 +61,7 @@ export function APIKeyPanel({
       />
 
       <ActionButton
+        ref={submitButtonRef}
         type="submit"
         label="Save credentials"
         pendingLabel="Saving credentials…"
