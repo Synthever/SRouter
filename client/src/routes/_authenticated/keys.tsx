@@ -26,7 +26,7 @@ function KeysPage() {
               className="text-foreground"
               aria-hidden="true"
             />
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-sm font-medium text-foreground">
               Active keys
             </span>
           </div>
@@ -40,7 +40,7 @@ function KeysPage() {
               <p className="font-medium text-foreground">
                 Default production key
               </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
+              <p className="font-mono text-xs text-muted-foreground">
                 sr-prod-9a8f...4e1b
               </p>
             </div>
@@ -58,7 +58,7 @@ function KeysPage() {
               <p className="font-medium text-foreground">
                 Internal development key
               </p>
-              <p className="font-mono text-[11px] text-muted-foreground">
+              <p className="font-mono text-xs text-muted-foreground">
                 sr-dev-3f2a...9c8d
               </p>
             </div>

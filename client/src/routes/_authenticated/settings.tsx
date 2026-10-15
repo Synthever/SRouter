@@ -21,7 +21,7 @@ function SettingsPage() {
         <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
           <div className="flex items-center gap-2 border-b border-border pb-3">
             <Lock size={15} className="text-foreground" aria-hidden="true" />
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-sm font-medium text-foreground">
               Admin authentication
             </span>
           </div>
@@ -43,13 +43,13 @@ function SettingsPage() {
               className="text-foreground"
               aria-hidden="true"
             />
-            <span className="text-xs font-semibold text-foreground">
+            <span className="text-sm font-medium text-foreground">
               Database storage and backup
             </span>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Database path:{" "}
-            <code className="font-mono text-[11px] text-foreground">
+            <code className="font-mono text-xs text-foreground">
               $HOME/.srouter/srouter.db
             </code>{" "}
             (SQLite schema version 4).

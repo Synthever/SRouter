@@ -365,7 +365,7 @@ export function OverviewPage() {
                   className="shrink-0 text-foreground"
                   aria-hidden="true"
                 />
-                <h2 className="text-xs font-semibold tracking-tight text-foreground">
+                <h2 className="text-sm font-medium tracking-tight text-foreground">
                   {WINDOW_QUESTIONS[metric][range]}
                 </h2>
               </div>
@@ -405,13 +405,13 @@ export function OverviewPage() {
                   className="shrink-0 text-foreground"
                   aria-hidden="true"
                 />
-                <h2 className="text-xs font-semibold tracking-tight text-foreground">
+                <h2 className="text-sm font-medium tracking-tight text-foreground">
                   Models routed, past {range}
                 </h2>
               </div>
               <div className="flex items-center gap-2">
                 {lastLog && (
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  <span className="font-mono text-xs text-muted-foreground">
                     Latest: {lastLog.model ?? "request"} ({lastLog.status_code})
                   </span>
                 )}

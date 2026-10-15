@@ -19,14 +19,14 @@ function LogsPage() {
       <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
         <div className="flex items-center gap-2 border-b border-border pb-3">
           <Terminal size={15} className="text-foreground" aria-hidden="true" />
-          <span className="text-xs font-semibold text-foreground">
+          <span className="text-sm font-medium text-foreground">
             Recent gateway activity
           </span>
         </div>
         <div className="divide-y divide-border/50 text-xs">
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+              <span className="rounded bg-success/10 px-1.5 py-0.5 font-mono text-xs text-success">
                 200 OK
               </span>
               <span className="font-mono text-foreground">
@@ -42,7 +42,7 @@ function LogsPage() {
           </div>
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+              <span className="rounded bg-success/10 px-1.5 py-0.5 font-mono text-xs text-success">
                 200 OK
               </span>
               <span className="font-mono text-foreground">
@@ -58,7 +58,7 @@ function LogsPage() {
           </div>
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+              <span className="rounded bg-success/10 px-1.5 py-0.5 font-mono text-xs text-success">
                 200 OK
               </span>
               <span className="font-mono text-foreground">

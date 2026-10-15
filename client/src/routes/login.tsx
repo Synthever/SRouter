@@ -297,7 +297,7 @@ function HeaderBar() {
         <div className="flex size-8 items-center justify-center rounded-lg bg-foreground text-background">
           <GatewayMark />
         </div>
-        <span className="text-[0.9375rem] font-medium tracking-tight text-foreground">
+        <span className="text-sm font-medium tracking-tight text-foreground">
           SRouter
         </span>
       </div>
@@ -349,7 +349,7 @@ function Login() {
 
         <footer className="relative z-10 flex items-center justify-between px-5 py-4 text-xs text-muted-foreground sm:px-8 sm:py-5">
           <div className="inline-flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-amber-600 dark:bg-amber-500" />
+            <span className="size-1.5 rounded-full bg-warning" />
             <span>Connecting</span>
           </div>
           <span>Operator authentication</span>
@@ -403,7 +403,7 @@ function Login() {
 
         <footer className="relative z-10 flex items-center justify-between px-5 py-4 text-xs text-muted-foreground sm:px-8 sm:py-5">
           <div className="inline-flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-red-600 dark:bg-red-500" />
+            <span className="size-1.5 rounded-full bg-danger" />
             <span>Server offline</span>
           </div>
           <span>Operator authentication</span>
@@ -525,7 +525,7 @@ function Login() {
 
       <footer className="relative z-10 flex items-center justify-between px-5 py-4 text-xs text-muted-foreground sm:px-8 sm:py-5">
         <div className="inline-flex items-center gap-2">
-          <span className="size-1.5 rounded-full bg-emerald-600 dark:bg-emerald-500" />
+          <span className="size-1.5 rounded-full bg-success" />
           <span>Gateway online</span>
         </div>
         <span>Operator authentication</span>
