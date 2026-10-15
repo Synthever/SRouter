@@ -7,12 +7,15 @@ import type {
   ProviderListResponse,
 } from "./types"
 
+export type AddCustomProviderInput = Parameters<typeof addCustomProvider>[0]
+
 /** `GET /v1/providers`. Complete provider list. */
 export const providersListQuery = queryOptions({
   queryKey: ["providers", "list"] as const,
   queryFn: ({ signal }) =>
     request<ProviderListResponse>("/v1/providers", { signal }),
   staleTime: 10_000,
+  refetchOnMount: "always",
 })
 
 /** `GET /v1/providers/catalog`. Grouped catalog: oauth, free_tier, api_key, custom_provider. */
