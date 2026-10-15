@@ -62,6 +62,10 @@ pub const OPENCODE_ZEN_MODELS: &[ModelDefinition] = &[
         id: "step-5-preview-free",
         name: "Step 5 Preview Free",
     },
+    ModelDefinition {
+        id: "deepseek-v4.1-flash-free",
+        name: "DeepSeek V4.1 Flash Free",
+    },
 ];
 
 /// The `opencode` legacy alias resolves to this provider's registered base id.
