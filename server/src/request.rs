@@ -1,26 +1,55 @@
 //! Generic request helpers shared across the HTTP middleware and the feature
 //! handlers: the peer address, the body-size cap, and cookie parsing.
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use axum::extract::ConnectInfo;
 use axum::http::{Extensions, HeaderMap, header};
 
+use crate::constants;
+
 /// Max accepted request body in bytes (25 MB). Matches Node MAX_BODY_BYTES.
 pub const MAX_BODY_BYTES: u64 = 25 * 1024 * 1024;
 
-/// Returns the socket peer address carried in request extensions, or `None`
-/// when the listener is not serving connect info.
+/// Returns the client address for a request: the `cf-connecting-ip` header when
+/// Cloudflare set it on a loopback peer, otherwise the socket peer address.
 ///
-/// Proxy and client-identifying headers are deliberately never consulted. The
-/// Node runtime falls back to the request URL hostname because Hono's
-/// `getConnInfo` fails in its test harness; that fallback lets a remote client
-/// claim `localhost` by setting `Host`, and the real Rust listener always has
-/// connect info.
-pub fn client_address(extensions: &Extensions) -> Option<String> {
-    extensions
+/// Reading a header is only sound because both conditions hold at once. Only
+/// Cloudflare reaches the listener, and it overwrites the header on every
+/// proxied request (a spoofed `cf-connecting-ip` never survives the edge, which
+/// was verified against the origin socket), so the value is trustworthy exactly
+/// when the peer is `cloudflared` on loopback. Any other peer is either the
+/// local operator or an upstream that cannot set the header, and its socket
+/// address is the truth.
+///
+/// Without this, every tunnelled request reports `127.0.0.1`: the admin login
+/// throttle would key every operator onto one address, and the loopback
+/// exemption in `api_key_auth` would treat the whole internet as local.
+///
+/// The Node build instead fell back to the request URL hostname when Hono's
+/// `getConnInfo` failed in its test harness; that fallback let a remote client
+/// claim `localhost` by setting `Host`, and is deliberately not reproduced.
+pub fn client_address(headers: &HeaderMap, extensions: &Extensions) -> Option<String> {
+    let peer = extensions
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(address)| address.ip().to_string())
+        .map(|ConnectInfo(address)| address.ip().to_string());
+
+    if peer.as_deref().is_some_and(is_loopback_address)
+        && let Some(forwarded) = header_address(headers)
+    {
+        return Some(forwarded);
+    }
+
+    peer
+}
+
+/// Reads `cf-connecting-ip` as a bare IP literal. A value carrying a port, a
+/// hostname, or anything else unparseable is ignored rather than trusted.
+fn header_address(headers: &HeaderMap) -> Option<String> {
+    let value = headers.get(constants::headers::name::CF_CONNECTING_IP)?;
+    let text = String::from_utf8_lossy(value.as_bytes());
+
+    text.trim().parse::<IpAddr>().ok().map(|ip| ip.to_string())
 }
 
 /// Matches Node's `isLoopbackAddress`: lowercase, strip one `::ffff:` prefix,
@@ -115,7 +144,7 @@ mod tests {
         let parts = request_parts(&[], Some(SocketAddr::from(([203, 0, 113, 7], 5555))));
 
         assert_eq!(
-            client_address(&parts.extensions).as_deref(),
+            client_address(&parts.headers, &parts.extensions).as_deref(),
             Some("203.0.113.7")
         );
     }
@@ -127,7 +156,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(client_address(&parts.extensions), None);
+        assert_eq!(client_address(&parts.headers, &parts.extensions), None);
     }
 
     #[test]
@@ -138,8 +167,65 @@ mod tests {
         );
 
         assert_eq!(
-            client_address(&parts.extensions).as_deref(),
+            client_address(&parts.headers, &parts.extensions).as_deref(),
             Some("203.0.113.7")
+        );
+    }
+
+    #[test]
+    fn a_loopback_peer_reports_the_forwarded_client() {
+        let parts = request_parts(
+            &[("cf-connecting-ip", "203.0.113.7")],
+            Some(SocketAddr::from(([127, 0, 0, 1], 5555))),
+        );
+
+        assert_eq!(
+            client_address(&parts.headers, &parts.extensions).as_deref(),
+            Some("203.0.113.7")
+        );
+    }
+
+    #[test]
+    fn a_remote_peer_ignores_the_forwarded_header() {
+        let parts = request_parts(
+            &[("cf-connecting-ip", "127.0.0.1")],
+            Some(SocketAddr::from(([198, 51, 100, 9], 5555))),
+        );
+
+        // A direct client must never be able to claim loopback, or the setup
+        // route and the API-key exemption would open to the internet.
+        assert_eq!(
+            client_address(&parts.headers, &parts.extensions).as_deref(),
+            Some("198.51.100.9")
+        );
+    }
+
+    #[test]
+    fn a_malformed_forwarded_header_falls_back_to_the_peer() {
+        for value in ["203.0.113.7:443", "not-an-ip", "", "127.0.0.1, 10.0.0.1"] {
+            let parts = request_parts(
+                &[("cf-connecting-ip", value)],
+                Some(SocketAddr::from(([127, 0, 0, 1], 5555))),
+            );
+
+            assert_eq!(
+                client_address(&parts.headers, &parts.extensions).as_deref(),
+                Some("127.0.0.1"),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_ipv6_forwarded_header_is_normalized() {
+        let parts = request_parts(
+            &[("cf-connecting-ip", "2001:DB8::1")],
+            Some(SocketAddr::from(([127, 0, 0, 1], 5555))),
+        );
+
+        assert_eq!(
+            client_address(&parts.headers, &parts.extensions).as_deref(),
+            Some("2001:db8::1")
         );
     }
 

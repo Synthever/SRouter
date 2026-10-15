@@ -54,7 +54,7 @@ impl RequestLogContext {
             .get::<OriginalUri>()
             .map(|OriginalUri(uri)| uri.path().to_owned())
             .unwrap_or_else(|| request.uri().path().to_owned());
-        let client_ip = client_address(request.extensions());
+        let client_ip = client_address(request.headers(), request.extensions());
         let user_agent = request
             .headers()
             .get(header::USER_AGENT)

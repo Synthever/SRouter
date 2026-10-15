@@ -99,6 +99,7 @@ pub mod headers {
         pub const X_XSS_PROTECTION: &str = "x-xss-protection";
         pub const REFERRER_POLICY: &str = "referrer-policy";
         pub const X_ACCEL_BUFFERING: &str = "x-accel-buffering";
+        pub const CF_CONNECTING_IP: &str = "cf-connecting-ip";
     }
 
     pub mod value {

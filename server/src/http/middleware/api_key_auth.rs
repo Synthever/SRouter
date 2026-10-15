@@ -25,7 +25,7 @@ pub async fn api_key_auth(State(state): State<AppState>, request: Request, next:
             cookie_value(headers, ADMIN_SESSION_COOKIE),
         )
     };
-    let peer = client_address(request.extensions());
+    let peer = client_address(request.headers(), request.extensions());
     let is_loopback = peer.as_deref().is_some_and(is_loopback_address);
 
     if let Some(token) = session_token {

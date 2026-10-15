@@ -116,7 +116,8 @@ pub async fn rate_limit(State(state): State<AppState>, request: Request, next: N
         return next.run(request).await;
     }
 
-    let address = client_address(request.extensions()).unwrap_or_else(|| "unknown".to_owned());
+    let address = client_address(request.headers(), request.extensions())
+        .unwrap_or_else(|| "unknown".to_owned());
     let window_key = format!("{}:{}", record.id, address);
     let limit = record.rate_limit;
 

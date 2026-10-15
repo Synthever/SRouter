@@ -89,7 +89,7 @@ async fn admin_setup(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, APIError> {
-    let address = client_address(request.extensions());
+    let address = client_address(request.headers(), request.extensions());
     if !address.as_deref().is_some_and(is_loopback_address) {
         return Err(APIError::new(403, constants::admin::SETUP_LOCAL_ONLY)
             .with_code(constants::ErrorCode::SetupLocalOnly));
@@ -142,7 +142,8 @@ async fn admin_login(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, APIError> {
-    let address = client_address(request.extensions()).unwrap_or_else(|| "unknown".to_owned());
+    let address = client_address(request.headers(), request.extensions())
+        .unwrap_or_else(|| "unknown".to_owned());
     let now = now_ms();
     if state.security.login_throttle.is_blocked(&address, now) {
         return Err(APIError::new(429, constants::admin::TOO_MANY_ATTEMPTS)
