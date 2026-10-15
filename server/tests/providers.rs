@@ -146,7 +146,10 @@ async fn providers_list_returns_the_seeded_entry() {
     assert_eq!(entry["name"], "OpenCode Zen");
     assert_eq!(entry["category"], "free_tier");
     assert_eq!(entry["protocol"], "openai");
-    assert_eq!(entry["default_base_url"], "https://opencode.ai/zen/v1");
+    assert_eq!(
+        entry["default_base_url"],
+        "https://opencode.ai/inference/v1"
+    );
     assert_eq!(entry["requires_api_key"], serde_json::json!(false));
     assert_eq!(entry["requires_oauth"], serde_json::json!(false));
     assert_eq!(entry["status"]["connected_count"], 0);

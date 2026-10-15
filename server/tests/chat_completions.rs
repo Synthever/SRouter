@@ -76,10 +76,9 @@ async fn post_v1_chat_completions_returns_the_upstream_completion() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
-    assert_eq!(
-        json["choices"][0]["message"]["content"],
-        "fake upstream reply"
-    );
+    // The upstream only answers a streaming body now, so the completion is
+    // folded from its SSE rather than returned as buffered JSON.
+    assert_eq!(json["choices"][0]["message"]["content"], "fake stream");
     // The adapter sends the resolved bare model id, not the prefixed one.
     assert_eq!(json["model"], "space-bunny-free");
 }
@@ -103,10 +102,7 @@ async fn post_v1_v1_compat_chat_completions_returns_the_upstream_completion() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
-    assert_eq!(
-        json["choices"][0]["message"]["content"],
-        "fake upstream reply"
-    );
+    assert_eq!(json["choices"][0]["message"]["content"], "fake stream");
 }
 
 #[tokio::test]
@@ -455,7 +451,7 @@ async fn request_limits_match_the_frozen_zod_schema() {
 
 #[tokio::test]
 async fn known_request_fields_are_forwarded_and_unknown_fields_are_dropped() {
-    let (_upstream, app) = test_app().await;
+    let (upstream, app) = test_app().await;
     let body = serde_json::json!({
         "model": "opencode_zen/space-bunny-free",
         "messages": [
@@ -490,12 +486,12 @@ async fn known_request_fields_are_forwarded_and_unknown_fields_are_dropped() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
 
-    // The gateway's own response is a pass-through of the upstream body.
-    assert_eq!(
-        json["choices"][0]["message"]["content"],
-        "fake upstream reply"
-    );
-    let echo = &json["echo"];
+    // The upstream only answers a streaming body, so the completion is folded
+    // from its SSE instead of passing a buffered body through.
+    assert_eq!(json["choices"][0]["message"]["content"], "fake stream");
+    // What the upstream received is read from the fake's recording: the
+    // aggregated response carries no echo of the request body.
+    let echo = upstream.last_chat_body();
     assert_eq!(echo["model"], "space-bunny-free");
     assert_eq!(echo["temperature"], 0.7);
     assert_eq!(echo["top_p"], 0.9);
@@ -783,7 +779,7 @@ async fn stream_unknown_model_emits_a_404_error_event() {
 
 #[tokio::test]
 async fn post_v1_chat_completions_forwards_cache_control_and_returns_cached_tokens() {
-    let (_upstream, app) = test_app().await;
+    let (upstream, app) = test_app().await;
     let body = serde_json::json!({
         "model": "opencode_zen/space-bunny-free",
         "messages": [
@@ -812,7 +808,9 @@ async fn post_v1_chat_completions_forwards_cache_control_and_returns_cached_toke
 
     // Upstream receives cache_control on message and content parts. The token
     // saver prepends a system message, so the client's user turn is at index 1.
-    let echo = &json["echo"];
+    // The request is read from the fake's recording: the response is the
+    // completion folded from the upstream's SSE and carries no echo.
+    let echo = upstream.last_chat_body();
     assert_eq!(echo["prompt_cache_key"], "cache-sess-ctx-1");
     assert_eq!(echo["messages"][0]["role"], "system");
     assert_eq!(echo["messages"][0]["content"], TERSE_DIRECTIVE);
@@ -911,10 +909,11 @@ async fn post_v1_chat_completions_intercepts_web_search_when_not_provided_by_cli
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
 
-    // Upstream was re-called with tool results; grounded answer returned
+    // Upstream was re-called with tool results; the grounded answer comes back
+    // as SSE (the upstream only answers a streaming body) and is folded here.
     assert_eq!(
         json["choices"][0]["message"]["content"],
-        "Grounded search response based on tool results"
+        "Grounded streaming search response"
     );
     assert_eq!(json["choices"][0]["finish_reason"], "stop");
 
@@ -924,8 +923,11 @@ async fn post_v1_chat_completions_intercepts_web_search_when_not_provided_by_cli
     assert_eq!(json["usage"]["total_tokens"], 115);
 
     // Verify messages delivered to upstream in turn 2. The token saver prepends
-    // a system message, so the follow-up turn carries four messages.
-    let echo_messages = json["echo"]["messages"].as_array().unwrap();
+    // a system message, so the follow-up turn carries four messages. The
+    // recording is read from the fake because the folded response carries no
+    // echo of the request body.
+    let turn_two = upstream.last_chat_body();
+    let echo_messages = turn_two["messages"].as_array().unwrap();
     assert_eq!(echo_messages.len(), 4);
     assert_eq!(echo_messages[0]["role"], "system");
     assert_eq!(echo_messages[0]["content"], TERSE_DIRECTIVE);

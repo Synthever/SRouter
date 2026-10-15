@@ -23,11 +23,13 @@ use crate::protocol::usage::UsageBreakdown;
 const OPENCODE_HARNESS_PREFIX: &str = include_str!("harness.txt");
 const OPENCODE_TOOLS_RAW: &str = include_str!("tools.json");
 
-/// Upstream Zen rejects requests whose tool set lacks its built-in `read` and
-/// `shell` tools with `403 FreeTierError` ("free tier can only be used from
-/// within OpenCode"). Client-provided tool sets are padded with inert stubs
-/// carrying those exact names so the request is accepted; the full OpenCode
-/// tool set is only injected when the client sent no tools at all.
+/// Upstream Zen rejects a request whose tool set lacks a harness-shaped `read`
+/// and `shell` with `403 FreeTierError` ("free tier can only be used from
+/// within OpenCode"), and it validates those tools' parameter schemas rather
+/// than their names alone. Client-provided tool sets are padded with the
+/// canonical definitions under an inert description so the request is
+/// accepted; the full OpenCode tool set is only injected when the client sent
+/// no tools at all.
 const OPENCODE_GATE_TOOLS: &[&str] = &["read", "shell"];
 
 const OPENCODE_GATE_TOOL_STUB_DESCRIPTION: &str =
@@ -91,44 +93,9 @@ impl OpenCodeExecutor {
         model: &str,
         request: &ChatCompletionRequest,
     ) -> Result<Value, APIError> {
-        // space-bunny-free can be invoked with standard direct JSON if not streaming:
-        if model.starts_with("space-bunny") {
-            let session_id = generate_opencode_session_id();
-            let response = self
-                .client
-                .raw()
-                .post(self.chat_completions_url())
-                .timeout(self.client.request_timeout())
-                .header("User-Agent", "opencode/latest/2.0.15/cli")
-                .header("Authorization", "Bearer public")
-                .header("x-opencode-client", "cli")
-                .header(
-                    "x-opencode-project",
-                    "a0e6aa2382ca897f3290ccf5d6aec2593a3eb435",
-                )
-                .header("x-opencode-session", &session_id)
-                .header("x-session-affinity", &session_id)
-                .header("x-session-id", &session_id)
-                .header("X-Session-Id", &session_id)
-                .json(&self.upstream_body(model, request, false)?)
-                .send()
-                .await
-                .map_err(upstream_error)?;
-
-            let status = response.status();
-            if !status.is_success() {
-                let detail = response.text().await.unwrap_or_default();
-                return Err(upstream_status_error(status, &detail));
-            }
-
-            return response.json::<Value>().await.map_err(|error| {
-                APIError::new(500, constants::providers::could_not_decode_response(&error))
-            });
-        }
-
-        // For other free models, upstream Zen rejects non-streaming requests with 403.
-        // We call upstream with stream=true and aggregate the SSE deltas into a standard
-        // non-streaming chat.completion response JSON.
+        // Every free-tier model refuses a non-streaming body with
+        // 403 FreeTierError, so the call is always made with stream=true and the
+        // deltas are aggregated into a standard non-streaming response below.
         let session_id = generate_opencode_session_id();
         let response = self
             .client
@@ -236,74 +203,81 @@ impl OpenCodeExecutor {
         body["model"] = Value::String(model.to_owned());
         body["stream"] = Value::Bool(stream);
 
-        // Models other than space-bunny require OpenCode harness wrapping:
-        if !model.starts_with("space-bunny") {
-            if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
-                let needs_harness = messages
-                    .first()
-                    .and_then(|m| m.get("content"))
-                    .and_then(|c| c.as_str())
-                    .map(|text| !text.starts_with("You are an AI agent running in OpenCode"))
-                    .unwrap_or(true);
+        // space-bunny rejects a long system preamble with `400 invalid request`,
+        // so only the other free models get wrapped in the OpenCode harness.
+        if !model.starts_with("space-bunny")
+            && let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut())
+        {
+            let needs_harness = messages
+                .first()
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_str())
+                .map(|text| !text.starts_with("You are an AI agent running in OpenCode"))
+                .unwrap_or(true);
 
-                if needs_harness {
-                    if let Some(first) = messages.first_mut() {
-                        if first.get("role").and_then(|r| r.as_str()) == Some("system") {
-                            if let Some(content) = first.get_mut("content")
-                                && let Some(old_str) = content.as_str()
-                            {
-                                *content = Value::String(format!(
-                                    "{OPENCODE_HARNESS_PREFIX}\n\n{old_str}"
-                                ));
-                            }
-                        } else {
-                            messages.insert(
-                                0,
-                                serde_json::json!({
-                                    "role": "system",
-                                    "content": OPENCODE_HARNESS_PREFIX
-                                }),
-                            );
+            if needs_harness {
+                if let Some(first) = messages.first_mut() {
+                    if first.get("role").and_then(|r| r.as_str()) == Some("system") {
+                        if let Some(content) = first.get_mut("content")
+                            && let Some(old_str) = content.as_str()
+                        {
+                            *content =
+                                Value::String(format!("{OPENCODE_HARNESS_PREFIX}\n\n{old_str}"));
                         }
                     } else {
-                        messages.push(serde_json::json!({
-                            "role": "system",
-                            "content": OPENCODE_HARNESS_PREFIX
-                        }));
+                        messages.insert(
+                            0,
+                            serde_json::json!({
+                                "role": "system",
+                                "content": OPENCODE_HARNESS_PREFIX
+                            }),
+                        );
                     }
+                } else {
+                    messages.push(serde_json::json!({
+                        "role": "system",
+                        "content": OPENCODE_HARNESS_PREFIX
+                    }));
                 }
             }
+        }
 
-            if body.get("tools").is_none()
-                || body
-                    .get("tools")
-                    .and_then(|t| t.as_array())
-                    .map(|a| a.is_empty())
-                    .unwrap_or(false)
-            {
-                let tools_val: Value = serde_json::from_str(OPENCODE_TOOLS_RAW).map_err(|e| {
-                    APIError::new(500, constants::providers::could_not_parse_tools(&e))
-                })?;
-                body["tools"] = tools_val;
-                body["tool_choice"] = Value::String("none".to_string());
-            } else if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
-                // Client tools: pad with inert gate stubs unless the exact
-                // names are already present (the gate match is case-sensitive,
-                // and duplicate names make upstream reject the request).
-                for name in OPENCODE_GATE_TOOLS {
-                    let present = tools
-                        .iter()
-                        .any(|t| t["function"]["name"].as_str() == Some(*name));
-                    if !present {
-                        tools.push(serde_json::json!({
-                            "type": "function",
-                            "function": {
-                                "name": name,
-                                "description": OPENCODE_GATE_TOOL_STUB_DESCRIPTION,
-                                "parameters": { "type": "object", "properties": {} }
-                            }
-                        }));
-                    }
+        // The gate rejects any body with no tools at all — space-bunny included —
+        // so the harness tool set is attached for every model.
+        if body.get("tools").is_none()
+            || body
+                .get("tools")
+                .and_then(|t| t.as_array())
+                .map(|a| a.is_empty())
+                .unwrap_or(false)
+        {
+            let tools_val: Value = serde_json::from_str(OPENCODE_TOOLS_RAW)
+                .map_err(|e| APIError::new(500, constants::providers::could_not_parse_tools(&e)))?;
+            body["tools"] = tools_val;
+            body["tool_choice"] = Value::String("none".to_string());
+        } else if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
+            // Client tool sets are padded with the harness tools the gate inspects.
+            // It reads their parameter schema, not just their names: a pad with an
+            // empty `properties` object still answers 403 FreeTierError, so each
+            // pad is the canonical definition with only the description rewritten
+            // to the inert wording (the description itself is not validated).
+            let catalog: Value = serde_json::from_str(OPENCODE_TOOLS_RAW)
+                .map_err(|e| APIError::new(500, constants::providers::could_not_parse_tools(&e)))?;
+            for name in OPENCODE_GATE_TOOLS {
+                let present = tools
+                    .iter()
+                    .any(|t| t["function"]["name"].as_str() == Some(*name));
+                if present {
+                    continue;
+                }
+                if let Some(canonical) = catalog.as_array().and_then(|all| {
+                    all.iter()
+                        .find(|t| t["function"]["name"].as_str() == Some(*name))
+                }) {
+                    let mut pad = canonical.clone();
+                    pad["function"]["description"] =
+                        Value::String(OPENCODE_GATE_TOOL_STUB_DESCRIPTION.to_owned());
+                    tools.push(pad);
                 }
             }
         }

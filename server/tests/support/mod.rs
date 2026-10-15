@@ -2725,7 +2725,9 @@ async fn fake_chat_completion(
                             "content": "Grounded streaming search response"
                         },
                         "finish_reason": "stop"
-                    }]
+                    }],
+                    // Same numbers as the buffered search branch below.
+                    "usage": { "prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70 }
                 });
                 let body = format!("data: {chunk_done}\n\ndata: [DONE]\n\n");
                 return Response::builder()
@@ -2764,7 +2766,9 @@ async fn fake_chat_completion(
                         "index": 0,
                         "delta": {},
                         "finish_reason": "tool_calls"
-                    }]
+                    }],
+                    // Same numbers as the buffered search branch below.
+                    "usage": { "prompt_tokens": 30, "completion_tokens": 15, "total_tokens": 45 }
                 });
                 let body = format!("data: {chunk1}\n\ndata: {chunk2}\n\ndata: [DONE]\n\n");
                 return Response::builder()
@@ -2775,9 +2779,36 @@ async fn fake_chat_completion(
             }
         }
 
-        let body = format!(
-            "data: {{\"id\":\"chatcmpl-fake\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"{model}\",\"choices\":[{{\"index\":0,\"delta\":{{\"content\":\"fake stream\"}}}}]}}\n\ndata: [DONE]\n\n"
-        );
+        // The real upstream reports usage on the stream (verified against
+        // opencode.ai/inference/v1 on 2026-10-15), so the streaming branch must
+        // carry the same numbers as the buffered branch below — otherwise the
+        // gateway can only estimate tokens from character counts.
+        let usage = if payload.get("prompt_cache_key").is_some() || model.contains("cached") {
+            serde_json::json!({
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "prompt_tokens_details": { "cached_tokens": 80 }
+            })
+        } else {
+            serde_json::json!({ "prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3 })
+        };
+        let chunk = serde_json::json!({
+            "id": "chatcmpl-fake",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": model,
+            "choices": [{ "index": 0, "delta": { "content": "fake stream" }, "finish_reason": null }]
+        });
+        let done = serde_json::json!({
+            "id": "chatcmpl-fake",
+            "object": "chat.completion.chunk",
+            "created": 1,
+            "model": model,
+            "choices": [{ "index": 0, "delta": {}, "finish_reason": "stop" }],
+            "usage": usage
+        });
+        let body = format!("data: {chunk}\n\ndata: {done}\n\ndata: [DONE]\n\n");
 
         return Response::builder()
             .status(StatusCode::OK)

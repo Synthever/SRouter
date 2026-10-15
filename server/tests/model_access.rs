@@ -88,10 +88,7 @@ async fn an_allowed_model_reaches_the_provider() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
-    assert_eq!(
-        json["choices"][0]["message"]["content"],
-        "fake upstream reply"
-    );
+    assert_eq!(json["choices"][0]["message"]["content"], "fake stream");
     drop(upstream);
 }
 

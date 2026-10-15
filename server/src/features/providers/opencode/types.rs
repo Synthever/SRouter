@@ -3,8 +3,8 @@
 //! Provenance, independent of `packages/*`:
 //! - `https://opencode.ai/docs/zen/` identifies OpenCode Zen, documents its API
 //!   endpoints, and lists the model names and ids offered through Zen.
-//! - `https://opencode.ai/zen/v1/models` is the provider's live public model
-//!   catalog. The ten ids in `OPENCODE_ZEN_MODELS` were checked against this
+//! - `https://opencode.ai/inference/v1/models` is the provider's live public model
+//!   catalog. The seven ids in `OPENCODE_ZEN_MODELS` were checked against this
 //!   endpoint and the docs table on 2026-10-11; the seed is an intentional
 //!   subset, not a snapshot of every model returned by the endpoint.
 //!   Deliberately excluded from the seed: `jev-1.13-free` (served on
@@ -12,7 +12,14 @@
 //!   pair (served on `/v1/responses`), and the paid tiers — none of them are
 //!   routable through the OpenAI-protocol executor. `mimo-v2.5-free` was
 //!   dropped: the docs table still lists it, but the live endpoint no longer
-//!   returns it.
+//!   returns it. Three more ids left the seed after the 2026-10-15 live smoke
+//!   test: `exo-free` now answers `410 ModelDeprecated`, and `ling-3.0-flash-fin-free`
+//!   and `ling-3.1-flash-free` answer `400 Model is unavailable`.
+//! - Free-tier chat moved off `/zen/v1/chat/completions` on 2026-10-14: that
+//!   path now answers `403 FreeTierError` to every caller, including the
+//!   official CLI, while the same bodies replayed against
+//!   `/inference/v1/chat/completions` answer `200`. Both paths still serve the
+//!   identical model catalog.
 //! - `https://opencode.ai/zen` is the provider's product page and web URL.
 //! - `docs/api-v1-contract.md` and the `apps/api` route/controller/tests are
 //!   the allowed sources for SRouter-facing metadata and compatibility behavior;
@@ -20,7 +27,7 @@
 
 use crate::features::providers::model::{ModelDefinition, ProviderMetadata, ProviderProtocol};
 
-pub const OPENCODE_ZEN_BASE_URL: &str = "https://opencode.ai/zen/v1";
+pub const OPENCODE_ZEN_BASE_URL: &str = "https://opencode.ai/inference/v1";
 
 /// Registry lookup keys: the base id plus the legacy `opencode` alias and the
 /// user-facing `zen` alias.
@@ -52,20 +59,8 @@ pub const OPENCODE_ZEN_MODELS: &[ModelDefinition] = &[
         name: "LongCat 2.5 Preview Free",
     },
     ModelDefinition {
-        id: "exo-free",
-        name: "Exo Free",
-    },
-    ModelDefinition {
         id: "step-5-preview-free",
         name: "Step 5 Preview Free",
-    },
-    ModelDefinition {
-        id: "ling-3.0-flash-fin-free",
-        name: "Ling 3.0 Flash Fin Free",
-    },
-    ModelDefinition {
-        id: "ling-3.1-flash-free",
-        name: "Ling 3.1 Flash Free",
     },
 ];
 

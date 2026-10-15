@@ -79,7 +79,7 @@ async fn post_v1_messages_non_streaming_returns_anthropic_format() {
     assert_eq!(json["model"], "opencode_zen/space-bunny-free");
     assert_eq!(json["stop_reason"], "end_turn");
     assert_eq!(json["content"][0]["type"], "text");
-    assert_eq!(json["content"][0]["text"], "fake upstream reply");
+    assert_eq!(json["content"][0]["text"], "fake stream");
     assert!(json["usage"]["input_tokens"].as_u64().unwrap() > 0);
     assert!(json["usage"]["output_tokens"].as_u64().unwrap() > 0);
 }
@@ -193,7 +193,7 @@ async fn post_v1_v1_compat_messages_returns_anthropic_format() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = json_body(response).await;
     assert_eq!(json["type"], "message");
-    assert_eq!(json["content"][0]["text"], "fake upstream reply");
+    assert_eq!(json["content"][0]["text"], "fake stream");
 }
 
 #[tokio::test]
