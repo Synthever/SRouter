@@ -2,6 +2,7 @@ import { KeyRound, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 
 import type { ProviderEntry } from "@/api/types"
+import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
 import {
   Tabs,
@@ -18,10 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import useMediaQuery from "@/hooks/useMediaQuery"
 
-import { APIKeyPanel } from "./panels/api-key-panel"
-import { OAuthPanel } from "./panels/oauth-panel"
-import { TokenImportPanel } from "./panels/token-import-panel"
+import APIKeyPanel from "./panels/APIKeyPanel"
+import OAuthPanel from "./panels/OAuthPanel"
+import TokenImportPanel from "./panels/TokenImportPanel"
 import useAPIKey from "./hooks/useAPIKey"
 import useOAuthFlow from "./hooks/useOAuthFlow"
 import useTokenImport from "./hooks/useTokenImport"
@@ -43,6 +45,7 @@ export function ConnectAccountModal({
 }: ConnectAccountModalProps) {
   const [authMode, setAuthMode] = useState<AuthMode>("oauth")
   const [connectionName, setConnectionName] = useState("")
+  const isMobile = useMediaQuery("(max-width: 639px)")
 
   const oauth = useOAuthFlow({
     providerID: provider.id,
@@ -78,88 +81,123 @@ export function ConnectAccountModal({
     setConnectionName("")
   }
 
+  const content = (
+    <div className="flex flex-col gap-4">
+      {provider.requires_oauth && (
+        <Tabs
+          value={authMode}
+          onValueChange={(value) => {
+            if (value === "oauth" || value === "token") setAuthMode(value)
+          }}
+          className="w-full"
+        >
+          <div className="flex w-full justify-center">
+            <TabsList className="w-full">
+              <TabsTrigger value="oauth" className="flex-1">
+                <ShieldCheck size={14} className="shrink-0" />
+                <span className="whitespace-nowrap">Browser OAuth</span>
+              </TabsTrigger>
+              <TabsTrigger value="token" className="flex-1">
+                <KeyRound size={14} className="shrink-0" />
+                <span className="whitespace-nowrap">
+                  <span className="hidden sm:inline">Direct token import</span>
+                  <span className="sm:hidden">Import token</span>
+                </span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="oauth" className="space-y-4">
+            <OAuthPanel flow={oauth} />
+          </TabsContent>
+
+          <TabsContent value="token" className="space-y-4">
+            <TokenImportPanel
+              providerID={provider.id}
+              flow={token}
+              connectionName={connectionName}
+              onConnectionNameChange={setConnectionName}
+            />
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {provider.requires_api_key && (
+        <APIKeyPanel
+          flow={apiKey}
+          connectionName={connectionName}
+          onConnectionNameChange={setConnectionName}
+        />
+      )}
+
+      {!provider.requires_oauth && !provider.requires_api_key && (
+        <div className="rounded-xl border border-border/80 bg-surface-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
+          This driver is preconfigured for free tier or local runtime routing.
+          No external credential connection is required.
+        </div>
+      )}
+    </div>
+  )
+
+  const headerDescription = provider.requires_oauth
+    ? "Authorize routing with your provider session."
+    : provider.requires_api_key
+      ? "Register an upstream API key for this provider driver."
+      : "Built-in provider runtime options."
+
+  if (isMobile) {
+    return (
+      <BottomSheet
+        open={open}
+        onOpenChange={handleClose}
+        title={`Connect ${provider.name}`}
+        description={headerDescription}
+        detents={[0.5, 0.92]}
+        initialDetent={0}
+      >
+        <div className="space-y-4 pt-1">
+          {content}
+          <div className="pt-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleClose(false)}
+              disabled={pending}
+              className="h-9 w-full"
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      </BottomSheet>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] gap-5 overflow-y-auto p-5 sm:max-w-[480px]">
+      <DialogContent className="max-h-[90vh] w-full gap-5 overflow-y-auto p-5 sm:max-w-2xl">
         <DialogHeader className="gap-1">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-surface-muted/50 text-foreground shadow-xs">
-              <ProviderLogo providerID={provider.id} size={22} />
+              <ProviderLogo providerID={provider.id} className="size-6" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <DialogTitle className="truncate text-sm font-semibold text-foreground">
+                <DialogTitle className="truncate text-sm font-medium text-foreground">
                   Connect {provider.name}
                 </DialogTitle>
-                <span className="rounded border border-border/60 bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground uppercase">
+                <span className="rounded border border-border/60 bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                   {provider.category}
                 </span>
               </div>
               <DialogDescription className="mt-0.5 truncate text-xs text-muted-foreground">
-                {provider.requires_oauth
-                  ? "Authorize routing with your provider session."
-                  : provider.requires_api_key
-                    ? "Register an upstream API key for this provider driver."
-                    : "Built-in provider runtime options."}
+                {headerDescription}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        {provider.requires_oauth && (
-          <Tabs
-            value={authMode}
-            onValueChange={(value) => {
-              if (value === "oauth" || value === "token") setAuthMode(value)
-            }}
-            className="w-full"
-          >
-            <div className="flex w-full justify-center">
-              <TabsList className="w-full">
-                <TabsTrigger value="oauth" className="flex-1">
-                  <ShieldCheck size={14} className="shrink-0" />
-                  <span className="whitespace-nowrap">Browser OAuth</span>
-                </TabsTrigger>
-                <TabsTrigger value="token" className="flex-1">
-                  <KeyRound size={14} className="shrink-0" />
-                  <span className="whitespace-nowrap">
-                    <span className="hidden sm:inline">
-                      Direct Token Import
-                    </span>
-                    <span className="sm:hidden">Import Token</span>
-                  </span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="oauth" className="space-y-4">
-              <OAuthPanel flow={oauth} />
-            </TabsContent>
-
-            <TabsContent value="token" className="space-y-4">
-              <TokenImportPanel
-                flow={token}
-                connectionName={connectionName}
-                onConnectionNameChange={setConnectionName}
-              />
-            </TabsContent>
-          </Tabs>
-        )}
-
-        {provider.requires_api_key && (
-          <APIKeyPanel
-            flow={apiKey}
-            connectionName={connectionName}
-            onConnectionNameChange={setConnectionName}
-          />
-        )}
-
-        {!provider.requires_oauth && !provider.requires_api_key && (
-          <div className="rounded-xl border border-border/80 bg-surface-muted/40 p-4 text-xs leading-relaxed text-muted-foreground">
-            This driver is preconfigured for free tier or local runtime routing.
-            No external credential connection is required.
-          </div>
-        )}
+        {content}
 
         <DialogFooter showCloseButton={false} className="pt-1 sm:justify-end">
           <Button

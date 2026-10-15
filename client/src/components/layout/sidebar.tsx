@@ -6,10 +6,12 @@ import {
   PanelLeftClose,
   Settings,
   Terminal,
+  X,
 } from "lucide-react"
 import { useEffect, type ComponentType } from "react"
 
 import { useAdminAuth } from "@/components/admin-auth-provider"
+import { ScrollArea } from "@/components/arc/scroll-area/scroll-area"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { UserMenu } from "@/components/arc/user-menu/user-menu"
 import { useTheme } from "@/components/theme-provider"
@@ -17,45 +19,44 @@ import { useTheme } from "@/components/theme-provider"
 export type DashboardTab =
   "overview" | "providers" | "usage" | "logs" | "keys" | "settings"
 
+/**
+ * The section names, keyed by their tab. The rail labels each row with it and
+ * the topbar names the current section with it, so one screen cannot end up
+ * called two different things.
+ */
+export const TAB_LABELS = {
+  overview: "Overview",
+  providers: "Providers",
+  usage: "Usage and quota",
+  logs: "Request logs",
+  keys: "API keys",
+  settings: "Settings",
+} satisfies Record<DashboardTab, string>
+
 export interface NavItem {
   id: DashboardTab
-  label: string
   icon: ComponentType<{ size?: number; className?: string }>
 }
 
-const MAIN_NAV_ITEMS: NavItem[] = [
-  {
-    id: "overview",
-    label: "Overview",
-    icon: LayoutDashboard,
-  },
-  {
-    id: "providers",
-    label: "Providers",
-    icon: Cpu,
-  },
-  {
-    id: "usage",
-    label: "Usage & Quota",
-    icon: BarChart3,
-  },
-  {
-    id: "logs",
-    label: "Request Logs",
-    icon: Terminal,
-  },
-  {
-    id: "keys",
-    label: "API Keys",
-    icon: KeyRound,
-  },
-]
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
 
-const SYSTEM_NAV_ITEMS: NavItem[] = [
+const NAV_SECTIONS: NavSection[] = [
   {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
+    label: "Gateway",
+    items: [
+      { id: "overview", icon: LayoutDashboard },
+      { id: "providers", icon: Cpu },
+      { id: "usage", icon: BarChart3 },
+      { id: "logs", icon: Terminal },
+      { id: "keys", icon: KeyRound },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ id: "settings", icon: Settings }],
   },
 ]
 
@@ -101,141 +102,163 @@ export function Sidebar({
   const { theme, setTheme } = useTheme()
   const { logout } = useAdminAuth()
 
-  // Close mobile drawer when resizing up to desktop
+  // The drawer covers the content and holds rows the pointer can reach, so it
+  // carries the two ways out a pointer alone cannot give: Escape, and the
+  // breakpoint where the permanent rail takes over.
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 768 && mobileOpen) {
+    if (!mobileOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
         onCloseMobile()
       }
     }
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        onCloseMobile()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
     window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("resize", handleResize)
+    }
   }, [mobileOpen, onCloseMobile])
 
-  const renderNavItem = (item: NavItem) => {
+  // `rail` is the desktop icon-only rail. The drawer is always expanded, even
+  // when the rail was left collapsed, so the state cannot hide every label on a
+  // phone.
+  const renderNavItem = (item: NavItem, rail: boolean) => {
     const isActive = currentTab === item.id
+    const label = TAB_LABELS[item.id]
     const Icon = item.icon
 
-    const buttonContent = (
+    const row = (
       <button
         type="button"
         onClick={() => {
           onSelectTab(item.id)
           onCloseMobile()
         }}
-        className={`group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-medium tracking-tight transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-foreground pointer-coarse:py-3 ${
+        aria-current={isActive ? "page" : undefined}
+        className={`relative flex min-h-[var(--control-height-sm)] w-full items-center gap-2.5 rounded-md px-2.5 text-sm tracking-tight transition-colors duration-150 ${
           isActive
-            ? "bg-foreground/8 font-semibold text-foreground dark:bg-white/10"
-            : "text-muted-foreground hover:bg-foreground/4 hover:text-foreground dark:hover:bg-white/5"
-        } ${collapsed ? "justify-center px-0" : ""}`}
+            ? "bg-foreground/10 font-medium text-foreground"
+            : "text-[var(--text-muted)] hover:bg-foreground/5 hover:text-foreground"
+        } ${rail ? "justify-center px-0" : ""}`}
       >
-        {/* Active accent bar on left */}
+        {/* The neutral accent is near-white, so a fill alone barely separates
+            the open section from a hovered one; the bar is what carries the
+            state when the palette has no hue to spend. */}
         {isActive && (
           <span
-            className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-foreground"
+            className="absolute top-1 bottom-1 left-0 w-0.5 rounded-full bg-foreground"
             aria-hidden="true"
           />
         )}
-        <Icon
-          size={16}
-          className={`shrink-0 transition-colors ${
-            isActive
-              ? "text-foreground"
-              : "text-muted-foreground group-hover:text-foreground"
-          }`}
-        />
-        {!collapsed && (
-          <span className="flex-1 truncate text-left">{item.label}</span>
-        )}
+        <Icon size={16} className="shrink-0" />
+        {!rail && <span className="truncate">{label}</span>}
       </button>
     )
 
-    if (collapsed) {
+    if (rail) {
       return (
-        <Tooltip key={item.id} content={item.label} side="right">
-          {buttonContent}
+        <Tooltip key={item.id} content={label} side="right">
+          {row}
         </Tooltip>
       )
     }
 
-    return <div key={item.id}>{buttonContent}</div>
+    return <div key={item.id}>{row}</div>
   }
 
-  const sidebarContent = (
-    <div className="flex h-full flex-col overflow-hidden bg-surface text-foreground">
-      {/* Top Brand & Rail Toggle */}
+  const renderContent = (rail: boolean) => (
+    <div className="flex h-full min-h-0 flex-col bg-surface text-foreground">
+      {/* Brand and rail controls */}
       <div
-        className={`flex h-14 shrink-0 items-center border-b border-border px-3.5 ${
-          collapsed ? "justify-center" : "justify-between"
+        className={`flex h-14 shrink-0 items-center border-b border-border px-2 ${
+          rail ? "justify-center" : "justify-between"
         }`}
       >
-        <div className="flex items-center gap-2.5 overflow-hidden">
+        <div
+          className={`flex items-center gap-2.5 overflow-hidden ${rail ? "" : "ml-1"}`}
+        >
           <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
             <GatewayMark />
           </div>
-          {!collapsed && (
-            <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+          {!rail && (
+            <span className="truncate text-sm font-medium tracking-tight text-foreground">
               SRouter
             </span>
           )}
         </div>
 
-        {!collapsed && (
-          <Tooltip content="Collapse sidebar ([)" side="right">
+        {!rail && (
+          <>
+            <Tooltip content="Collapse sidebar ([)" side="bottom">
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label="Collapse sidebar"
+                className="hidden size-[var(--control-height-sm)] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:inline-flex"
+              >
+                <PanelLeftClose size={15} />
+              </button>
+            </Tooltip>
             <button
               type="button"
-              onClick={onToggleCollapse}
-              aria-label="Collapse sidebar"
-              className="hidden size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-2 focus-visible:outline-foreground md:inline-flex pointer-coarse:size-11"
+              onClick={onCloseMobile}
+              aria-label="Close navigation"
+              className="inline-flex size-[var(--control-height-sm)] items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden"
             >
-              <PanelLeftClose size={15} />
+              <X size={16} />
             </button>
-          </Tooltip>
+          </>
         )}
       </div>
 
-      {/* Navigation Sections */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-2.5">
-        <div className="space-y-1">
-          {!collapsed && (
-            <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Gateway
+      <ScrollArea className="min-h-0 flex-1" label="Dashboard navigation">
+        <nav aria-label="Dashboard" className="flex flex-col gap-5 p-2">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.label} className="flex flex-col gap-1.5">
+              {!rail && (
+                <div className="px-2.5 py-1 text-xs text-muted-foreground">
+                  {section.label}
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                {section.items.map((item) => renderNavItem(item, rail))}
+              </div>
             </div>
-          )}
-          <div className="space-y-0.5">{MAIN_NAV_ITEMS.map(renderNavItem)}</div>
-        </div>
-
-        <div className="space-y-1 border-t border-border/60 pt-1">
-          {!collapsed && (
-            <div className="px-2.5 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              System
-            </div>
-          )}
-          <div className="space-y-0.5">
-            {SYSTEM_NAV_ITEMS.map(renderNavItem)}
-          </div>
-        </div>
-      </div>
+          ))}
+        </nav>
+      </ScrollArea>
 
       {/* Operator Session Footer */}
-      <div className="shrink-0 border-t border-border p-2">
-        <div className={collapsed ? "flex justify-center" : "w-full"}>
-          <UserMenu
-            user={{
-              name: "Admin Operator",
-              email: "admin",
-            }}
-            theme={theme}
-            onThemeChange={(next) => setTheme(next)}
-            showTheme
-            showName={!collapsed}
-            align={collapsed ? "center" : "start"}
-            onSignOut={async () => {
-              await logout.mutateAsync()
-              window.location.href = "/login"
-            }}
-          />
-        </div>
+      <div
+        className={`shrink-0 border-t border-border p-2 ${
+          rail ? "flex justify-center" : ""
+        }`}
+      >
+        <UserMenu
+          user={{
+            name: "Admin Operator",
+            email: "admin",
+          }}
+          theme={theme}
+          onThemeChange={(next) => setTheme(next)}
+          showTheme
+          showName={!rail}
+          align={rail ? "center" : "start"}
+          onSignOut={async () => {
+            await logout.mutateAsync()
+            window.location.href = "/login"
+          }}
+        />
       </div>
     </div>
   )
@@ -245,7 +268,7 @@ export function Sidebar({
       {/* Mobile Drawer Overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={onCloseMobile}
           aria-hidden="true"
         />
@@ -253,20 +276,21 @@ export function Sidebar({
 
       {/* Mobile Drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform border-r border-border bg-surface transition-transform duration-200 ease-in-out md:hidden ${
+        inert={!mobileOpen}
+        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-surface transition-transform duration-200 ease-in-out md:hidden ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {sidebarContent}
+        {renderContent(false)}
       </aside>
 
       {/* Desktop Persistent Sidebar */}
       <aside
         className={`hidden h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 ease-in-out md:flex ${
-          collapsed ? "w-14" : "w-60"
+          collapsed ? "w-14" : "w-64"
         }`}
       >
-        {sidebarContent}
+        {renderContent(collapsed)}
       </aside>
     </>
   )

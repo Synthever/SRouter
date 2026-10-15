@@ -62,6 +62,7 @@ use crate::features::catalog::models::{CatalogModel, ModelListResponse};
 use crate::features::catalog::pricing::PricingListResponse;
 use crate::features::catalog::quota::QuotaResponse;
 use crate::features::logs::{LiveEvent, LogsResponse};
+use crate::features::providers::management::VerifyResponse;
 use crate::features::providers::management::model::{
     CatalogResponse, GroupedCatalog, ProviderConnectionView, ProviderEntry, ProviderModel,
     ProviderStatus,
@@ -109,6 +110,7 @@ pub fn types() -> Types {
         .register::<CatalogResponse>()
         .register::<GroupedCatalog>()
         .register::<ProviderProtocol>()
+        .register::<VerifyResponse>()
         .register::<LogsResponse>()
         .register::<RequestLog>()
         .register::<UsageStatsReport>()

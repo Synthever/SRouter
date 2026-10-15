@@ -158,12 +158,12 @@ function ProviderDetailPage() {
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex size-13 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-muted text-foreground shadow-2xs">
-            <ProviderLogo providerID={provider.id} size={28} />
+            <ProviderLogo providerID={provider.id} className="size-7" />
           </div>
 
           <div className="flex flex-col">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground">
+              <h1 className="text-lg font-medium tracking-tight text-foreground">
                 {provider.name}
               </h1>
               {isLive ? (
@@ -172,7 +172,7 @@ function ProviderDetailPage() {
                   size="sm"
                   icon={
                     <span
-                      className="size-1.5 rounded-full bg-emerald-500"
+                      className="size-1.5 rounded-full bg-success"
                       aria-hidden="true"
                     />
                   }
@@ -193,11 +193,7 @@ function ProviderDetailPage() {
               <Badge tone="neutral" size="sm" className="capitalize">
                 {provider.category.replace("_", " ")}
               </Badge>
-              <Badge
-                tone="neutral"
-                size="sm"
-                className="font-mono text-[10px] uppercase"
-              >
+              <Badge tone="neutral" size="sm" className="font-mono text-xs">
                 {provider.protocol}
               </Badge>
             </div>
@@ -254,7 +250,7 @@ function ProviderDetailPage() {
           <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex items-center justify-between border-b border-border/70 pb-3.5">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">
+                <h2 className="text-sm font-medium text-foreground">
                   Active connections
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -286,12 +282,12 @@ function ProviderDetailPage() {
                           {conn.name}
                         </span>
                         {conn.prefix && (
-                          <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                          <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                             prefix: {conn.prefix}
                           </span>
                         )}
                       </div>
-                      <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                      <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
                         {conn.base_url || provider.default_base_url}
                       </span>
                     </div>
@@ -303,7 +299,7 @@ function ProviderDetailPage() {
                       >
                         {conn.enabled ? "Connected" : "Disabled"}
                       </Badge>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {new Date(conn.created_at * 1000).toLocaleDateString()}
                       </span>
                     </div>
@@ -315,7 +311,7 @@ function ProviderDetailPage() {
                 <p className="text-xs font-medium text-foreground">
                   {provider.status.message}
                 </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {provider.requires_oauth
                     ? "Requires OAuth authentication token to establish live connections."
                     : provider.requires_api_key
@@ -341,7 +337,7 @@ function ProviderDetailPage() {
           <div className="rounded-xl border border-border bg-surface p-5">
             <div className="flex flex-col gap-3 border-b border-border/70 pb-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">
+                <h2 className="text-sm font-medium text-foreground">
                   Supported models
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -376,14 +372,14 @@ function ProviderDetailPage() {
                       <span className="font-mono text-xs text-foreground">
                         {model.id}
                       </span>
-                      <span className="ml-2 text-[10px] text-muted-foreground">
+                      <span className="ml-2 text-xs text-muted-foreground">
                         by {model.owned_by}
                       </span>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1.5">
                       {model.favorite && (
-                        <span title="Favorite model" className="text-amber-500">
+                        <span title="Favorite model" className="text-warning">
                           <Star size={12} fill="currentColor" />
                         </span>
                       )}
@@ -414,7 +410,7 @@ function ProviderDetailPage() {
         <div className="flex flex-col gap-6">
           {/* Routing Configuration */}
           <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-sm font-medium text-foreground">
               Traffic rotation
             </h2>
 
@@ -423,7 +419,7 @@ function ProviderDetailPage() {
                 <span className="block text-xs font-medium text-foreground">
                   Round-robin balancing
                 </span>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Distributes incoming requests evenly across all active
                   accounts.
                 </p>
@@ -445,16 +441,16 @@ function ProviderDetailPage() {
 
           {/* Upstream Technical Specifications */}
           <div className="space-y-3.5 rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-sm font-medium text-foreground">
               Driver specifications
             </h2>
 
             <div>
-              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+              <span className="text-xs font-medium text-muted-foreground">
                 Default base endpoint
               </span>
               <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1.5">
-                <span className="truncate font-mono text-[11px] text-foreground">
+                <span className="truncate font-mono text-xs text-foreground">
                   {provider.default_base_url}
                 </span>
                 <CopyButton
@@ -467,15 +463,15 @@ function ProviderDetailPage() {
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span className="text-xs font-medium text-muted-foreground">
                   Protocol
                 </span>
-                <span className="mt-1 block font-mono text-xs text-foreground uppercase">
+                <span className="mt-1 block font-mono text-xs text-foreground">
                   {provider.protocol}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span className="text-xs font-medium text-muted-foreground">
                   OAuth Required
                 </span>
                 <span className="mt-1 block text-xs text-foreground">
@@ -483,7 +479,7 @@ function ProviderDetailPage() {
                 </span>
               </div>
               <div>
-                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span className="text-xs font-medium text-muted-foreground">
                   API Key Required
                 </span>
                 <span className="mt-1 block text-xs text-foreground">
@@ -491,7 +487,7 @@ function ProviderDetailPage() {
                 </span>
               </div>
               <div>
-                <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                <span className="text-xs font-medium text-muted-foreground">
                   Custom URL
                 </span>
                 <span className="mt-1 block text-xs text-foreground">

@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
-import { ChevronRight, Plus, Search } from "lucide-react"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { Plus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { addCustomProvider, providersListQuery } from "@/api/providers"
 import type { ProviderProtocol } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
+import { Alert } from "@/components/arc/alert/alert"
 import { Badge } from "@/components/arc/badge/badge"
 import { Button } from "@/components/arc/button/button"
+import { Card } from "@/components/arc/card/card"
+import ChipGroup from "@/components/arc/chip-group/chip-group"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
-import { MetricCard } from "@/components/arc/metric-card/metric-card"
-import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
+import { SearchField } from "@/components/arc/search-field/search-field"
+import { Skeleton } from "@/components/arc/skeleton/skeleton"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { SectionHeader } from "@/components/layout/section-header"
 import { AddCustomProviderDialog } from "@/components/providers/add-custom-provider-dialog"
@@ -36,6 +39,12 @@ const PROTOCOL_LABELS = {
   custom: "Custom",
 } satisfies Record<ProviderProtocol, string>
 
+/* The rail and the topbar take their width out of the viewport before this grid
+   sees any of it, so a viewport breakpoint here overstates the room a card has.
+   One column until the content column is wide enough for two cards at their
+   natural size, then three only on a wide desk. */
+const CARD_GRID = "grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3"
+
 function categoryLabel(category: string) {
   switch (category) {
     case "oauth":
@@ -52,7 +61,7 @@ function categoryLabel(category: string) {
 }
 
 function connectionLabel(count: number) {
-  return `${count} enabled ${count === 1 ? "connection" : "connections"}`
+  return `${count} ${count === 1 ? "connection" : "connections"}`
 }
 
 function ProvidersListPage() {
@@ -78,25 +87,21 @@ function ProvidersListPage() {
       selectedCategory === "all" || provider.category === selectedCategory
     return matchesSearch && matchesCategory
   })
-  const enabledDriverCount = providers.filter(
-    (provider) => provider.enabled
-  ).length
-  const enabledConnectionCount = providers.reduce(
-    (total, provider) => total + provider.status.connected_count,
-    0
-  )
-  const categoryOptions = CATEGORIES.map((category) => ({
-    value: category.id,
-    label: category.label,
-    accessory: data ? (
-      <span aria-hidden="true" className="text-muted-foreground tabular-nums">
-        {category.id === "all"
-          ? providers.length
-          : providers.filter((provider) => provider.category === category.id)
-              .length}
-      </span>
-    ) : undefined,
-  }))
+  // A category is a facet, so the chips read as a filter, not as a view switch:
+  // they narrow the list below and the count rides in the label.
+  const categoryOptions = CATEGORIES.map((category) => {
+    const count = data
+      ? category.id === "all"
+        ? providers.length
+        : providers.filter((provider) => provider.category === category.id)
+            .length
+      : null
+    return {
+      value: category.id,
+      label: count === null ? category.label : `${category.label} ${count}`,
+    }
+  })
+  const filtersActive = normalizedSearch !== "" || selectedCategory !== "all"
 
   useEffect(() => {
     if (!data || isFetching) return
@@ -160,7 +165,6 @@ function ProvidersListPage() {
               variant="primary"
               size="md"
               onClick={() => setAddDialogOpen(true)}
-              className="flex items-center gap-2"
             >
               <Plus size={16} aria-hidden="true" />
               <span>Add custom provider</span>
@@ -176,123 +180,68 @@ function ProvidersListPage() {
         }
       />
 
-      {data && (
-        <>
-          <section
-            aria-label="Provider summary"
-            className="grid grid-cols-1 gap-4 md:grid-cols-3"
-          >
-            <MetricCard
-              label="Registered drivers"
-              value={providers.length}
-              context="Provider entries in this gateway"
-            />
-            <MetricCard
-              label="Enabled drivers"
-              value={enabledDriverCount}
-              context="Driver routing flag is on"
-            />
-            <MetricCard
-              label="Enabled connections"
-              value={enabledConnectionCount}
-              context="Enabled entries across drivers"
-            />
-          </section>
-          <p className="-mt-3 text-xs text-muted-foreground">
-            Driver enablement controls routing. Connection totals count enabled
-            entries and are not a provider health check.
-          </p>
-        </>
-      )}
-
-      {!data && isLoading && (
-        <section
-          aria-label="Loading provider summary"
-          aria-busy="true"
-          className="grid grid-cols-1 gap-4 md:grid-cols-3"
-        >
-          {Array.from({ length: 3 }, (_, index) => (
-            <div
-              key={index}
-              aria-hidden="true"
-              className="min-h-40 rounded-[var(--radius-surface)] border border-border bg-surface p-6 shadow-[var(--shadow-resting)]"
-            >
-              <div className="mb-8 h-4 w-36 animate-pulse rounded bg-surface-muted motion-reduce:animate-none" />
-              <div className="h-8 w-14 animate-pulse rounded bg-surface-muted motion-reduce:animate-none" />
-              <div className="mt-4 h-4 w-44 max-w-full animate-pulse rounded bg-surface-muted motion-reduce:animate-none" />
-            </div>
-          ))}
-        </section>
-      )}
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full min-w-0 lg:max-w-sm">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <input
-            id="provider-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            placeholder="Search providers"
-            aria-label="Search providers"
-            className="h-11 w-full min-w-0 rounded-lg border border-border bg-surface pr-3 pl-10 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 motion-reduce:transition-none"
-          />
-        </div>
-        <SegmentedControl
-          label="Filter providers by category"
-          value={selectedCategory}
-          onValueChange={(value) => {
-            const category = CATEGORIES.find((option) => option.id === value)
-            if (category) setSelectedCategory(category.id)
-          }}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SearchField
+          id="provider-search"
+          label="Search providers"
+          value={search}
+          onValueChange={setSearch}
+          placeholder="Filter by name, id, or protocol..."
+          className="w-full sm:max-w-xs"
+        />
+        <ChipGroup
+          label="Filter by category"
           options={categoryOptions}
+          value={[selectedCategory]}
+          onValueChange={(next) => {
+            const picked = next.find((value) => value !== selectedCategory)
+            const category = CATEGORIES.find((option) => option.id === picked)
+            setSelectedCategory(category ? category.id : "all")
+          }}
+          multiple={false}
+          maxVisible={3}
           className="max-w-full"
         />
       </div>
 
       {isError && (
-        <section
-          role="alert"
-          className="border-danger/30 bg-danger/10 flex flex-col gap-3 rounded-[var(--radius-surface)] border p-4 sm:flex-row sm:items-center sm:justify-between"
+        <Alert
+          tone="danger"
+          title={
+            data ? "Could not refresh providers" : "Could not load providers"
+          }
         >
-          <div className="min-w-0">
-            <h2 className="text-danger text-sm font-medium">
-              {data
-                ? "Could not refresh providers"
-                : "Could not load providers"}
-            </h2>
-            <p className="text-danger mt-1 text-xs break-words">
+          <span className="flex flex-col items-start gap-3">
+            <span className="break-words">
               {error instanceof Error
                 ? error.message
                 : "The provider list is unavailable."}
               {data ? " Showing the last loaded data." : ""}
-            </p>
-          </div>
-          <ActionButton
-            label={data ? "Retry refresh" : "Retry provider list"}
-            pendingLabel="Retrying list"
-            successLabel="List loaded"
-            onAction={refreshProviders}
-            className="!border-border !bg-surface !text-foreground"
-          />
-        </section>
+            </span>
+            <ActionButton
+              label={data ? "Retry refresh" : "Retry provider list"}
+              pendingLabel="Retrying list"
+              successLabel="List loaded"
+              onAction={refreshProviders}
+              className="!border-border !bg-surface !text-foreground"
+            />
+          </span>
+        </Alert>
       )}
 
       {isLoading && !data && (
         <div
           aria-busy="true"
           aria-label="Loading providers"
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          className={CARD_GRID}
         >
           {Array.from({ length: 6 }, (_, index) => (
             <div
               key={index}
-              className="h-32 animate-pulse rounded-[var(--radius-surface)] border border-border bg-surface-muted motion-reduce:animate-none"
-            />
+              className="rounded-[var(--radius-panel)] border border-border bg-surface p-5"
+            >
+              <Skeleton label="Loading providers" lines={2} avatar />
+            </div>
           ))}
         </div>
       )}
@@ -300,18 +249,14 @@ function ProvidersListPage() {
       {!isLoading && data && filteredProviders.length === 0 && (
         <EmptyState
           label="Provider results"
-          title={
-            normalizedSearch || selectedCategory !== "all"
-              ? "No matching providers"
-              : "No providers yet"
-          }
+          title={filtersActive ? "No matching providers" : "No providers yet"}
           description={
-            normalizedSearch || selectedCategory !== "all"
+            filtersActive
               ? "Try another search or clear the category filter."
               : "Add a custom endpoint to route requests through your own model service."
           }
           action={
-            normalizedSearch || selectedCategory !== "all" ? (
+            filtersActive ? (
               <Button variant="secondary" size="md" onClick={resetFilters}>
                 Clear filters
               </Button>
@@ -333,7 +278,7 @@ function ProvidersListPage() {
           aria-labelledby="provider-list-title"
           className="flex flex-col gap-3"
         >
-          <div className="flex items-baseline justify-between gap-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h2
               id="provider-list-title"
               className="text-sm font-medium text-foreground"
@@ -344,54 +289,59 @@ function ProvidersListPage() {
               {filteredProviders.length} of {providers.length} drivers
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={CARD_GRID}>
             {filteredProviders.map((provider) => (
-              <Link
+              <Card
                 key={provider.id}
-                to="/providers/$providerId"
-                params={{ providerId: provider.id }}
-                aria-label={`Open settings for ${provider.name}`}
-                className="group hover:border-border-strong flex min-w-0 flex-col rounded-[var(--radius-surface)] border border-border bg-surface p-4 transition-colors hover:bg-surface-muted/40 motion-reduce:transition-none"
+                title={provider.name}
+                avatar={
+                  <ProviderLogo providerID={provider.id} className="size-8" />
+                }
+                meta={<span className="font-mono">{provider.id}</span>}
+                status={provider.status.message}
+                action={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      void navigate({
+                        to: "/providers/$providerId",
+                        params: { providerId: provider.id },
+                      })
+                    }
+                  >
+                    Configure
+                  </Button>
+                }
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <ProviderLogo
-                    providerID={provider.id}
-                    size={28}
-                    className="shrink-0 text-foreground"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <h3 className="truncate text-sm font-medium text-foreground">
-                        {provider.name}
-                      </h3>
-                      <ChevronRight
-                        size={16}
-                        className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <p className="truncate font-mono text-xs text-muted-foreground">
-                      {provider.id}
-                    </p>
-                  </div>
-                </div>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   <Badge
                     tone={provider.enabled ? "success" : "neutral"}
                     size="sm"
                   >
-                    {provider.enabled ? "Driver enabled" : "Driver disabled"}
+                    {provider.enabled ? "Enabled" : "Disabled"}
                   </Badge>
-                  <Badge tone="neutral" size="sm">
+                  <span className="text-xs text-muted-foreground">
                     {connectionLabel(provider.status.connected_count)}
-                  </Badge>
+                  </span>
+                  <span className="text-xs text-muted-foreground">•</span>
+                  <span className="text-xs text-muted-foreground">
+                    {categoryLabel(provider.category)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">•</span>
+                  <span className="text-xs text-muted-foreground">
+                    {PROTOCOL_LABELS[provider.protocol]}
+                  </span>
+                  {provider.round_robin && (
+                    <>
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        Rotation on
+                      </span>
+                    </>
+                  )}
                 </div>
-                <p className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  <span>{categoryLabel(provider.category)}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{PROTOCOL_LABELS[provider.protocol]}</span>
-                </p>
-              </Link>
+              </Card>
             ))}
           </div>
         </section>

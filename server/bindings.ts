@@ -581,6 +581,14 @@ export type UsageTotals = {
 	cost: UsageCostTotals,
 };
 
+/**  The verification response, mirroring Node's `VerifyConnection`. */
+export type VerifyResponse = {
+	success: boolean,
+	message: string,
+	models_count?: number | null,
+	connection_id?: string | null,
+};
+
 export const ErrorCode = {
 	invalid_request: "invalid_request",
 	invalid_type: "invalid_type",

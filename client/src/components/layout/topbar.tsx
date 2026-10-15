@@ -1,9 +1,11 @@
 import { Menu, PanelLeft } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 
-import { ThemeSwitch } from "@/components/arc/theme-switch/theme-switch"
+import { providerDetailQuery } from "@/api/providers"
+import { Breadcrumb, type BreadcrumbItem } from "@/components/arc/breadcrumb/breadcrumb"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
-import { useTheme } from "@/components/theme-provider"
-import type { DashboardTab } from "./sidebar"
+import { TAB_LABELS, type DashboardTab } from "./sidebar"
 
 export interface TopbarProps {
   currentTab: DashboardTab
@@ -12,80 +14,77 @@ export interface TopbarProps {
   onOpenMobile: () => void
 }
 
-const TAB_TITLES: Record<DashboardTab, string> = {
-  overview: "Overview",
-  providers: "Providers",
-  usage: "Usage & Quota",
-  logs: "Request Logs",
-  keys: "API Keys",
-  settings: "Settings",
-}
-
 export function Topbar({
   currentTab,
   collapsed,
   onToggleCollapse,
   onOpenMobile,
 }: TopbarProps) {
-  const { theme, setTheme } = useTheme()
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const providerDetailMatch = location.pathname.match(
+    /^\/providers\/([^/]+)/
+  )
+  const providerId = providerDetailMatch
+    ? decodeURIComponent(providerDetailMatch[1] ?? "")
+    : ""
+
+  const { data: provider } = useQuery({
+    ...providerDetailQuery(providerId),
+    enabled: Boolean(providerId),
+  })
+
+  const controlClass =
+    "inline-flex size-[var(--control-height-sm)] shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: "SRouter", onClick: () => navigate({ to: "/" }) },
+  ]
+
+  if (providerDetailMatch) {
+    breadcrumbItems.push({
+      label: "Providers",
+      onClick: () => navigate({ to: "/providers" }),
+    })
+    breadcrumbItems.push({
+      label: provider?.name || providerId,
+    })
+  } else {
+    breadcrumbItems.push({
+      label: TAB_LABELS[currentTab],
+    })
+  }
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 w-full shrink-0 items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6">
-      {/* Left: Mobile Toggle / Rail Toggle + Breadcrumb */}
-      <div className="flex items-center gap-3">
-        {/* Mobile menu trigger */}
-        <button
-          type="button"
-          onClick={onOpenMobile}
-          aria-label="Open navigation drawer"
-          className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden pointer-coarse:size-11"
-        >
-          <Menu size={18} />
-        </button>
+    // The horizontal padding mirrors `main` in app-shell, so the crumb sits on
+    // the same vertical line as the page heading below it.
+    <header className="sticky top-0 z-20 flex h-14 w-full shrink-0 items-center gap-2 border-b border-border bg-background/85 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+      <button
+        type="button"
+        onClick={onOpenMobile}
+        aria-label="Open navigation"
+        className={`${controlClass} md:hidden`}
+      >
+        <Menu size={18} />
+      </button>
 
-        {/* Desktop rail expand trigger when collapsed */}
-        {collapsed && (
-          <Tooltip content="Expand sidebar ([)" side="bottom">
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              aria-label="Expand sidebar"
-              className="hidden size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:inline-flex pointer-coarse:size-11"
-            >
-              <PanelLeft size={17} />
-            </button>
-          </Tooltip>
-        )}
+      {collapsed && (
+        <Tooltip content="Expand sidebar ([)" side="bottom">
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="Expand sidebar"
+            className={`${controlClass} hidden md:inline-flex`}
+          >
+            <PanelLeft size={17} />
+          </button>
+        </Tooltip>
+      )}
 
-        {/* Breadcrumb Heading */}
-        <nav
-          aria-label="Breadcrumb"
-          className="flex items-center gap-2 text-xs font-medium tracking-tight"
-        >
-          <span className="text-muted-foreground">SRouter</span>
-          <span className="text-border" aria-hidden="true">
-            /
-          </span>
-          <span className="font-semibold text-foreground">
-            {TAB_TITLES[currentTab]}
-          </span>
-        </nav>
-      </div>
-
-      {/* Right: Theme Switch */}
-      <div className="flex items-center gap-2.5">
-        <ThemeSwitch
-          theme={isDark ? "dark" : "light"}
-          variant="split"
-          iconOnly
-          onThemeChange={(next) => setTheme(next)}
-        />
-      </div>
+      {/* The path is the header's only content: an operator tool says which
+          section is open and stays out of the way of the data below it. */}
+      <Breadcrumb items={breadcrumbItems} />
     </header>
   )
 }

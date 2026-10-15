@@ -19,7 +19,9 @@ export function SectionHeader({
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+          {/* 18px is the top of the scale this dashboard reaches: the Arc faces
+              split at 30px, which an operator screen never needs. */}
+          <h1 className="text-lg font-medium tracking-tight text-foreground">
             {title}
           </h1>
           {badge && (
@@ -28,7 +30,7 @@ export function SectionHeader({
             </Badge>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-pretty text-muted-foreground">
+        <p className="mt-1 text-sm text-pretty text-muted-foreground">
           {description}
         </p>
       </div>

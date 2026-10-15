@@ -5,6 +5,7 @@ import type {
   CatalogResponse,
   ProviderEntry,
   ProviderListResponse,
+  VerifyResponse,
 } from "./types"
 
 export type AddCustomProviderInput = Parameters<typeof addCustomProvider>[0]
@@ -159,6 +160,16 @@ export function completeOAuthCallback(
   }>(cbPath, {
     method: "POST",
     body: params,
+  })
+}
+
+/** `POST /v1/providers/verify`. Probes an unsaved endpoint without storing it. */
+export function verifyCustomProvider(
+  body: Pick<AddCustomProviderInput, "protocol" | "base_url" | "api_key">
+) {
+  return request<VerifyResponse>("/v1/providers/verify", {
+    method: "POST",
+    body,
   })
 }
 

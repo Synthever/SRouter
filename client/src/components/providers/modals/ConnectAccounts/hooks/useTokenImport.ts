@@ -4,7 +4,7 @@ import { importOAuthToken } from "@/api/providers"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import useClipboard from "@/hooks/useClipboard"
 
-import { parseSessionPayload } from "../session-payload"
+import parseSessionPayload from "../session-payload"
 
 type TokenImportMode = "form" | "raw"
 

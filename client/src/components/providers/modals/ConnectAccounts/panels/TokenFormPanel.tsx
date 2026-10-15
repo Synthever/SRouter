@@ -8,12 +8,14 @@ import { cn } from "@/lib/utils"
 import useTokenImport from "../hooks/useTokenImport"
 
 type TokenFormPanelProps = {
+  providerID: string
   flow: ReturnType<typeof useTokenImport>
   connectionName: string
   onConnectionNameChange: (value: string) => void
 }
 
-export function TokenFormPanel({
+export default function TokenFormPanel({
+  providerID,
   flow,
   connectionName,
   onConnectionNameChange,
@@ -25,6 +27,9 @@ export function TokenFormPanel({
   // submits to it. Without this the button's own click and the form's submit
   // both fire and the token is imported twice.
   const submitButtonRef = useRef<HTMLButtonElement>(null)
+  const isCodex =
+    providerID.toLowerCase().includes("codex") ||
+    providerID.toLowerCase().includes("openai")
 
   return (
     <form
@@ -40,14 +45,14 @@ export function TokenFormPanel({
       {flow.fileName ? (
         <div className="flex items-center justify-between rounded-lg border border-border/80 bg-surface/80 px-3 py-2 text-xs">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-500">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
               <FileText size={15} />
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-foreground">
                 {flow.fileName}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">
+              <p className="truncate text-xs text-muted-foreground">
                 {connectionName || "Session credentials loaded"}
               </p>
             </div>
@@ -100,7 +105,7 @@ export function TokenFormPanel({
           <span className="text-xs font-medium text-foreground">
             Upload or drop session file
           </span>
-          <span className="mt-0.5 text-[10.5px] text-muted-foreground">
+          <span className="mt-0.5 text-xs text-muted-foreground">
             Supports <code className="font-mono">.json</code> or{" "}
             <code className="font-mono">.txt</code> (auto-extracts tokens)
           </span>
@@ -116,7 +121,7 @@ export function TokenFormPanel({
         />
 
         <FloatingField
-          label="Access Token"
+          label="Access token"
           requiredMark
           type="password"
           canTogglePassword
@@ -124,9 +129,15 @@ export function TokenFormPanel({
           value={flow.accessToken}
           onChange={(event) => {
             const value = event.target.value
-            // A whole session dump pasted into this one field is parsed rather
-            // than stored, so the token stays a token.
-            if (value.trim().startsWith("{") && value.includes("accessToken")) {
+            // A whole session dump or JSON pasted into this one field is parsed
+            // rather than stored, so the token stays a token.
+            const trimmed = value.trim()
+            if (
+              trimmed.startsWith("{") &&
+              (trimmed.includes("access_token") ||
+                trimmed.includes("accessToken") ||
+                trimmed.includes("token"))
+            ) {
               flow.setRawInput(value)
               flow.applySessionText(value)
               return
@@ -136,16 +147,18 @@ export function TokenFormPanel({
           placeholder="eyJh... or paste full JSON here"
         />
 
-        <FloatingField
-          label="ChatGPT Account ID (optional)"
-          monospace
-          value={flow.accountID}
-          onChange={(event) => flow.setAccountID(event.target.value)}
-          placeholder="Account UUID from ~/.codex/auth.json"
-        />
+        {isCodex && (
+          <FloatingField
+            label="ChatGPT account ID (optional)"
+            monospace
+            value={flow.accountID}
+            onChange={(event) => flow.setAccountID(event.target.value)}
+            placeholder="Account UUID from ~/.codex/auth.json"
+          />
+        )}
 
         <FloatingField
-          label="Refresh Token (optional)"
+          label="Refresh token (optional)"
           type="password"
           canTogglePassword
           monospace
@@ -155,14 +168,14 @@ export function TokenFormPanel({
         />
       </div>
 
-      <div className="flex items-center justify-between pt-0.5 text-[11px]">
+      <div className="flex items-center justify-between pt-0.5 text-xs">
         <button
           type="button"
           onClick={() => flow.setMode("raw")}
           className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
         >
           <Code2 size={12} />
-          <span>Have raw JSON? Switch to Raw Mode</span>
+          <span>Have raw JSON? Switch to raw mode</span>
         </button>
       </div>
 

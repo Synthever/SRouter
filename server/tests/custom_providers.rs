@@ -53,6 +53,27 @@ async fn json(response: Response) -> serde_json::Value {
 const PUBLIC_BASE_URL: &str = "https://api.example.com/v1";
 
 #[tokio::test]
+async fn verify_rejects_private_endpoints_before_probing() {
+    let database = TestDatabase::new().unwrap();
+    let app = app(&database).await;
+
+    let response = app
+        .oneshot(admin_request(
+            "POST",
+            "/v1/providers/verify",
+            serde_json::json!({
+                "protocol": "openai",
+                "base_url": "http://127.0.0.1:9000/v1",
+                "api_key": "sk-test"
+            }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn creates_a_custom_provider_under_a_uuid() {
     let database = TestDatabase::new().unwrap();
     let app = app(&database).await;

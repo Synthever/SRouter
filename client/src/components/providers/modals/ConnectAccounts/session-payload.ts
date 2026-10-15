@@ -79,7 +79,9 @@ function withTokenClaims(session: ParsedSession): ParsedSession {
   }
 }
 
-export function parseSessionPayload(text: string): ParsedSession | null {
+export default function parseSessionPayload(
+  text: string
+): ParsedSession | null {
   const trimmed = text.trim()
   if (!trimmed) return null
 

@@ -12,7 +12,7 @@ type APIKeyPanelProps = {
   onConnectionNameChange: (value: string) => void
 }
 
-export function APIKeyPanel({
+export default function APIKeyPanel({
   flow,
   connectionName,
   onConnectionNameChange,
@@ -37,11 +37,11 @@ export function APIKeyPanel({
         label="Account label (optional)"
         value={connectionName}
         onChange={(event) => onConnectionNameChange(event.target.value)}
-        placeholder="e.g. Primary Production Key"
+        placeholder="e.g. Primary production key"
       />
 
       <FloatingField
-        label="API Key"
+        label="API key"
         requiredMark
         type="password"
         canTogglePassword

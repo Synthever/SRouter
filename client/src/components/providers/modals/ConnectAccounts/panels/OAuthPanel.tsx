@@ -12,7 +12,7 @@ type OAuthPanelProps = {
   flow: ReturnType<typeof useOAuthFlow>
 }
 
-export function OAuthPanel({ flow }: OAuthPanelProps) {
+export default function OAuthPanel({ flow }: OAuthPanelProps) {
   const {
     oauthData,
     callbackInput,
@@ -38,7 +38,7 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
           </div>
           <div className="text-xs">
             <span className="block font-medium text-foreground">
-              Vendor Sign-in Portal
+              Vendor sign-in portal
             </span>
             <span className="mt-1 block leading-relaxed text-muted-foreground">
               Click below to generate a secure PKCE session and open the
@@ -71,10 +71,10 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-[11px] font-semibold text-emerald-500">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-success/15 text-xs font-medium text-success">
             ✓
           </div>
-          <span className="text-xs font-semibold text-foreground">
+          <span className="text-sm font-medium text-foreground">
             Paste callback URL or code
           </span>
         </div>
@@ -92,7 +92,7 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
             href={oauthData.authorize_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[11px] font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex cursor-pointer items-center gap-1.5 px-2 py-1 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
             title="Reopen authorization window in browser"
           >
             <ExternalLink size={12} />
@@ -101,7 +101,7 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
         </div>
       </div>
 
-      <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-surface/60 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+      <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-surface/60 p-2.5 text-xs leading-relaxed text-muted-foreground">
         <Info
           size={14}
           className="mt-0.5 shrink-0 text-primary"
@@ -133,7 +133,7 @@ export function OAuthPanel({ flow }: OAuthPanelProps) {
             <button
               type="button"
               onClick={pasteCallback}
-              className="inline-flex cursor-pointer items-center gap-1 rounded border border-border/70 bg-surface-muted/90 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex cursor-pointer items-center gap-1 rounded border border-border/70 bg-surface-muted/90 px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               title="Paste from clipboard"
             >
               <Clipboard size={11} />

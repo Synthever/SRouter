@@ -235,18 +235,20 @@ pub async fn verify_connection(
 }
 
 /// The verification response, mirroring Node's `VerifyConnection`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 pub struct VerifyResponse {
-    success: bool,
-    message: String,
+    pub success: bool,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    models_count: Option<usize>,
+    #[specta(optional)]
+    pub models_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    connection_id: Option<String>,
+    #[specta(optional)]
+    pub connection_id: Option<String>,
 }
 
 impl VerifyResponse {
-    fn ok(message: String, models_count: Option<usize>) -> Self {
+    fn ok(message: String, models_count: Option<u32>) -> Self {
         Self {
             success: true,
             message,
@@ -316,7 +318,7 @@ async fn probe(
     let count = body
         .get("data")
         .and_then(Value::as_array)
-        .map(|models| models.len());
+        .and_then(|models| u32::try_from(models.len()).ok());
 
     if status.is_success() {
         let message = match count {

@@ -207,7 +207,7 @@ No external form library (like TanStack Form or React Hook Form) is installed. T
 
 | Thing           | Convention               | Example                                           |
 | --------------- | ------------------------ | ------------------------------------------------- |
-| Files           | kebab-case               | `theme-provider.tsx`, `token-form-panel.tsx`      |
+| `*.tsx` files   | PascalCase, no hyphens   | `ThemeProvider.tsx`, `TokenFormPanel.tsx`         |
 | Directories     | kebab-case               | `arc/floating-field/`, `arc/sortable-data-table/` |
 | Components      | PascalCase, named export | `GaugeTooltip`, `Button`                          |
 | Hooks           | `useX.ts`, `useX` export | `useOAuthFlow.ts` → `useOAuthFlow`                |
@@ -217,7 +217,7 @@ No external form library (like TanStack Form or React Hook Form) is installed. T
 | Local helpers   | verb phrase, lowercase   | `describe`, `afterAuth`, `isEditableTarget`       |
 | Acronyms / ID   | uppercase, never mixed case | `useAPIKey`, `providerID`, `keyID`            |
 
-A folder that holds one feature's panels, hook, and logic behind a single name takes PascalCase (`modals/ConnectAccounts/`); its files stay kebab-case, and every other folder stays kebab-case.
+`*.tsx` filenames are PascalCase with no hyphens throughout `client/src`. This is a forward-looking rule: do not rename existing files, and keep TanStack route filenames unchanged unless a separate task explicitly requests a route rename. The only filename exception is the frozen vendor code under `components/ui/`, `components/arc/`, and `components/gauge/`; never rename files in those folders. Directories remain kebab-case except feature directories that intentionally use PascalCase, such as `modals/ConnectAccounts/`.
 
 **`{arc, ui, gauge}` under `components/` are off-limits.** Never edit, rename, or move anything inside `components/arc/`, `components/ui/`, or `components/gauge/`. All three are library code (`ui/` is shadcn, `arc/` is UIARC, `gauge/` is the sanctioned SVG kit), so their file names, directory names, and exported identifiers are frozen. Touch them only when the task is explicitly about that component, and keep every existing name even then.
 
