@@ -102,7 +102,7 @@ Constants hold literal strings. Messages that interpolate are **functions** with
 `src/request.rs`:
 
 - `MAX_BODY_BYTES = 25 MiB` — the one body cap.
-- `client_address(extensions)` reads **only** `ConnectInfo<SocketAddr>`. The Node build fell back to the `Host` header, which let a remote client claim localhost; the Rust listener always injects connect info, so the fallback is gone. Consequence: behind a reverse proxy, rate limiting keys on the proxy's address.
+- `client_address(headers, extensions, trust_cf_connecting_ip)` reads `ConnectInfo<SocketAddr>`. It prefers `cf-connecting-ip` only when the flag is true and the peer is loopback. Set `SROUTER_TRUST_CF_CONNECTING_IP=true` only if Cloudflare overwrites the header and is the only service that can reach SRouter over loopback; otherwise the socket address remains authoritative. `X-Forwarded-For` and `Host` are never consulted.
 - `is_loopback_address` lowercases, strips one `::ffff:` prefix, then requires exactly `127.0.0.1` or `::1`.
 - `cookie_value` joins duplicate `Cookie` headers, splits on `;`, trims, and matches the name exactly (quotes kept).
 

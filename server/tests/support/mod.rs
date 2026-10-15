@@ -14,7 +14,7 @@ use axum::{
     Json, Router,
     body::{Body, Bytes},
     extract::{ConnectInfo, State},
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Request, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -2296,6 +2296,13 @@ pub fn empty_registry_state(security: SecurityState) -> AppState {
     AppState::with_security(test_config(), ProviderRegistry::new(), security)
 }
 
+/// Empty-registry state with the trusted Cloudflare-proxy address override enabled.
+pub fn trusted_proxy_state(security: SecurityState) -> AppState {
+    let mut config = test_config();
+    config.trust_cf_connecting_ip = true;
+    AppState::with_security(config, ProviderRegistry::new(), security)
+}
+
 /// Security state wired with fixture stores.
 pub fn security_state(
     require_api_key: bool,
@@ -2423,6 +2430,20 @@ pub fn with_remote_client(mut request: Request<Body>, address: &str) -> Request<
         .expect("remote test address");
 
     request.extensions_mut().insert(ConnectInfo(socket));
+
+    request
+}
+
+/// Injects a loopback peer plus the `cf-connecting-ip` header Cloudflare sets,
+/// matching a request that reached the server through the tunnel.
+pub fn with_tunnelled_client(mut request: Request<Body>, address: &str) -> Request<Body> {
+    request
+        .extensions_mut()
+        .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40_000))));
+    request.headers_mut().insert(
+        srouter_server::constants::headers::name::CF_CONNECTING_IP,
+        HeaderValue::from_str(address).expect("forwarded address"),
+    );
 
     request
 }

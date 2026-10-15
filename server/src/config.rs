@@ -11,6 +11,8 @@ pub struct APIConfig {
     pub cors_origins: Vec<String>,
     pub admin_password: Option<String>,
     pub secure_cookies: bool,
+    /// Whether `cf-connecting-ip` may identify requests received from a loopback proxy.
+    pub trust_cf_connecting_ip: bool,
     /// True unless `NODE_ENV=development` (case-insensitive) selects the
     /// development environment. Production is the default and drives
     /// production-only defaults.
@@ -30,6 +32,9 @@ pub struct APIConfig {
 impl APIConfig {
     pub fn from_env_map(environment: &HashMap<String, String>) -> Result<Self, ConfigError> {
         let port = parse_port(environment, "PORT", 3000)?;
+        let trust_cf_connecting_ip = environment
+            .get("SROUTER_TRUST_CF_CONNECTING_IP")
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"));
         let home = environment
             .get("HOME")
             .filter(|home| !home.is_empty())
@@ -106,6 +111,7 @@ impl APIConfig {
                 .filter(|password| !password.is_empty())
                 .cloned(),
             secure_cookies,
+            trust_cf_connecting_ip,
             is_production,
             access_log,
             web_dist_path: environment
@@ -134,6 +140,7 @@ impl Debug for APIConfig {
                 &self.admin_password.as_ref().map(|_| REDACTED),
             )
             .field("secure_cookies", &self.secure_cookies)
+            .field("trust_cf_connecting_ip", &self.trust_cf_connecting_ip)
             .field("is_production", &self.is_production)
             .field("access_log", &self.access_log)
             .field("web_dist_path", &self.web_dist_path)

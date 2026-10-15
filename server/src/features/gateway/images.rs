@@ -88,7 +88,11 @@ pub async fn create_image(
     principal: Option<Extension<APIPrincipal>>,
     request: Request,
 ) -> Result<Response, APIError> {
-    let log_context = RequestLogContext::from_request(&request, principal.as_ref())?;
+    let log_context = RequestLogContext::from_request(
+        &request,
+        principal.as_ref(),
+        state.config.trust_cf_connecting_ip,
+    )?;
 
     let body = read_json_body(request)
         .await

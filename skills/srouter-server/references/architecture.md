@@ -86,5 +86,5 @@ Both are `Clone` (everything inside is `Arc`), which is why middleware clones th
 - **`/v1` nests own their 404.** Each nest has `.fallback(route_not_found)`, so an unmatched API path answers JSON instead of falling through to the SPA shell.
 - **Root routes and the SPA fallback are registered before the global layers**, because `Router::layer` only wraps routes that already exist.
 - **Last-added layer is outermost.** The chain is written in the order Node ran it.
-- **`client_address` never trusts headers.** Loopback auth comes from `ConnectInfo` only, so `X-Forwarded-For`/`Host` cannot claim localhost.
+- **`client_address` trusts `cf-connecting-ip` only when `SROUTER_TRUST_CF_CONNECTING_IP=true` and the socket peer is loopback.** Set the flag only if Cloudflare overwrites the header and is the only service that can reach SRouter over loopback. Otherwise the socket peer is used; every other proxy header (`X-Forwarded-For`, `Host`) stays untrusted.
 - **SQLite is the only backend.** `DATABASE_URL` is refused before any file is touched.

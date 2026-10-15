@@ -11,7 +11,7 @@ use srouter_server::features::admin_auth::hash_session_token;
 use srouter_server::features::api_keys::APIKeyRecord;
 use support::{
     api_key_record, empty_registry_state, json_request, json_request_with_headers, security_state,
-    with_loopback_client, with_remote_client,
+    trusted_proxy_state, with_loopback_client, with_remote_client, with_tunnelled_client,
 };
 use tower::ServiceExt;
 
@@ -93,6 +93,30 @@ async fn loopback_requests_need_a_key_when_the_requirement_is_on() {
         "invalid_request_error",
         "missing_api_key",
         LOOPBACK_MISSING_MESSAGE,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn a_tunnelled_public_client_never_counts_as_loopback() {
+    let app = create_router(trusted_proxy_state(security_state(false, vec![], vec![])));
+    let response = app
+        .oneshot(with_tunnelled_client(
+            json_request("POST", CHAT, chat_body()),
+            REMOTE,
+        ))
+        .await
+        .unwrap();
+
+    // Before the forwarded address was read, every tunnelled request looked
+    // loopback, so turning the requirement off opened the gateway to the
+    // internet. The remote message proves the client is treated as public.
+    assert_error(
+        response,
+        StatusCode::UNAUTHORIZED,
+        "invalid_request_error",
+        "missing_api_key",
+        REMOTE_MISSING_MESSAGE,
     )
     .await;
 }
@@ -485,6 +509,7 @@ async fn spoofed_client_headers_do_not_change_the_decision() {
                 &[
                     ("host", "localhost"),
                     ("x-forwarded-for", "127.0.0.1"),
+                    ("cf-connecting-ip", "127.0.0.1"),
                     ("x-srouter-client", "playground"),
                 ],
             ),

@@ -25,6 +25,7 @@ fn defaults_use_frozen_listener_and_sqlite_values() {
     assert!(config.cors_origins.is_empty());
     assert!(config.admin_password.is_none());
     assert!(!config.secure_cookies);
+    assert!(!config.trust_cf_connecting_ip);
     assert!(
         config.is_production,
         "production is the default environment"
@@ -110,6 +111,27 @@ fn invalid_listener_ports_return_the_environment_variable_name() {
 #[test]
 fn missing_home_is_reported_when_the_default_database_path_is_needed() {
     assert!(matches!(config_from(&[]), Err(ConfigError::MissingHome)));
+}
+
+#[test]
+fn cloudflare_client_ip_is_untrusted_unless_the_flag_is_exactly_true() {
+    for value in ["", "false", "1", "yes"] {
+        let config = config_from(&[
+            ("HOME", "/tmp/srouter-home"),
+            ("SROUTER_TRUST_CF_CONNECTING_IP", value),
+        ])
+        .unwrap();
+        assert!(!config.trust_cf_connecting_ip, "value={value:?}");
+    }
+
+    for value in ["true", "TRUE", " True "] {
+        let config = config_from(&[
+            ("HOME", "/tmp/srouter-home"),
+            ("SROUTER_TRUST_CF_CONNECTING_IP", value),
+        ])
+        .unwrap();
+        assert!(config.trust_cf_connecting_ip, "value={value:?}");
+    }
 }
 
 #[test]

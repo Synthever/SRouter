@@ -45,6 +45,7 @@ impl RequestLogContext {
     pub(crate) fn from_request(
         request: &Request,
         principal: Option<&Extension<APIPrincipal>>,
+        trust_cf_connecting_ip: bool,
     ) -> Result<Self, APIError> {
         let start_time = clock::now_ms();
         let request_id = generate_log_id()?;
@@ -54,7 +55,11 @@ impl RequestLogContext {
             .get::<OriginalUri>()
             .map(|OriginalUri(uri)| uri.path().to_owned())
             .unwrap_or_else(|| request.uri().path().to_owned());
-        let client_ip = client_address(request.headers(), request.extensions());
+        let client_ip = client_address(
+            request.headers(),
+            request.extensions(),
+            trust_cf_connecting_ip,
+        );
         let user_agent = request
             .headers()
             .get(header::USER_AGENT)

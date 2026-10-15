@@ -15,6 +15,7 @@ use srouter_server::{AppState, ProviderRegistry};
 use support::{
     TestDatabase, empty_registry_state, json_request, json_request_with_headers,
     sqlx_admin_security_state, test_secure_config, with_loopback_client, with_remote_client,
+    with_tunnelled_client,
 };
 use tower::ServiceExt;
 
@@ -40,6 +41,12 @@ async fn secure_admin_app(database: &TestDatabase) -> Router {
         ProviderRegistry::new(),
         security,
     ))
+}
+
+async fn trusted_proxy_admin_app(database: &TestDatabase) -> Router {
+    let security = sqlx_admin_security_state(database).await;
+
+    create_router(support::trusted_proxy_state(security))
 }
 
 fn loopback(request: Request<Body>) -> Request<Body> {
@@ -322,6 +329,88 @@ async fn five_failed_logins_block_further_attempts() {
     assert_eq!(
         json_body(blocked).await["error"]["code"],
         "login_rate_limited"
+    );
+}
+
+#[tokio::test]
+async fn a_tunnelled_client_is_throttled_by_its_forwarded_address() {
+    let database = TestDatabase::new().unwrap();
+    let app = trusted_proxy_admin_app(&database).await;
+    set_up(&app, "correct horse").await;
+
+    // Five failures from one tunnelled client must not lock out another one;
+    // keying on the loopback peer instead would block every operator at once.
+    for _ in 0..5 {
+        let response = app
+            .clone()
+            .oneshot(with_tunnelled_client(
+                json_request_with_headers(
+                    "POST",
+                    LOGIN,
+                    serde_json::json!({ "password": "wrong" }),
+                    &[("cf-connecting-ip", "198.51.100.9")],
+                ),
+                "198.51.100.9",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    let blocked = app
+        .clone()
+        .oneshot(with_tunnelled_client(
+            json_request_with_headers(
+                "POST",
+                LOGIN,
+                serde_json::json!({ "password": "wrong" }),
+                &[("cf-connecting-ip", "198.51.100.9")],
+            ),
+            "198.51.100.9",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    let other = app
+        .oneshot(with_tunnelled_client(
+            json_request_with_headers(
+                "POST",
+                LOGIN,
+                serde_json::json!({ "password": "correct horse" }),
+                &[("cf-connecting-ip", "203.0.113.7")],
+            ),
+            "203.0.113.7",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_setup_route_stays_local_for_a_tunnelled_client() {
+    let database = TestDatabase::new().unwrap();
+    let app = trusted_proxy_admin_app(&database).await;
+
+    // The forwarded address is what decides, so a public client reaching the
+    // tunnel can no longer claim localhost and take over first-run setup.
+    let response = app
+        .oneshot(with_tunnelled_client(
+            json_request_with_headers(
+                "POST",
+                SETUP,
+                serde_json::json!({ "password": "correct horse" }),
+                &[("cf-connecting-ip", "198.51.100.9")],
+            ),
+            "198.51.100.9",
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        json_body(response).await["error"]["code"],
+        "setup_local_only"
     );
 }
 

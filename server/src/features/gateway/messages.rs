@@ -43,7 +43,11 @@ pub async fn create_message(
     request: Request,
 ) -> Response {
     let version = request.version();
-    let log_context = match RequestLogContext::from_request(&request, principal.as_ref()) {
+    let log_context = match RequestLogContext::from_request(
+        &request,
+        principal.as_ref(),
+        state.config.trust_cf_connecting_ip,
+    ) {
         Ok(context) => context,
         Err(error) => return error.into_response(),
     };

@@ -39,7 +39,11 @@ pub async fn create_completion(
     request: Request,
 ) -> Result<Response, APIError> {
     let version = request.version();
-    let mut log_context = RequestLogContext::from_request(&request, principal.as_ref())?;
+    let mut log_context = RequestLogContext::from_request(
+        &request,
+        principal.as_ref(),
+        state.config.trust_cf_connecting_ip,
+    )?;
 
     let body = read_json_body(request)
         .await
