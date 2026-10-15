@@ -14,6 +14,7 @@ fn message(role: ChatRole, content: ChatContent) -> ChatMessage {
         tool_calls: None,
         tool_call_id: None,
         cache_control: None,
+        reasoning_content: None,
     }
 }
 
@@ -314,6 +315,7 @@ fn assistant_tool_calls_and_results_flatten_back_into_the_prompt() {
             }]),
             tool_call_id: None,
             cache_control: None,
+            reasoning_content: None,
         },
         ChatMessage {
             role: ChatRole::Tool,
@@ -322,6 +324,7 @@ fn assistant_tool_calls_and_results_flatten_back_into_the_prompt() {
             tool_calls: None,
             tool_call_id: Some("call-1".to_owned()),
             cache_control: None,
+            reasoning_content: None,
         },
         message(ChatRole::User, ChatContent::Text("And Bandung?".to_owned())),
     ];

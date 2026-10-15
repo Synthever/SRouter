@@ -92,6 +92,7 @@ pub(crate) fn assistant_tool_message(
         tool_calls: Some(tool_calls),
         tool_call_id: None,
         cache_control: None,
+        reasoning_content: None,
     }
 }
 
@@ -136,6 +137,7 @@ pub(crate) async fn attach_search_results(
             tool_calls: None,
             tool_call_id: Some(tool_call_id),
             cache_control: None,
+            reasoning_content: None,
         });
     }
 }

@@ -282,6 +282,22 @@ impl OpenCodeExecutor {
             }
         }
 
+        // DeepSeek reasoning models require `reasoning_content` in thinking mode
+        // for any assistant messages present in conversation history. If omitted,
+        // upstream returns `400 The reasoning_content in the thinking mode must be
+        // passed back to the API`.
+        if model.starts_with("deepseek")
+            && let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut())
+        {
+            for msg in messages {
+                if msg.get("role").and_then(|r| r.as_str()) == Some("assistant")
+                    && msg.get("reasoning_content").is_none()
+                {
+                    msg["reasoning_content"] = Value::String(String::new());
+                }
+            }
+        }
+
         Ok(body)
     }
 }

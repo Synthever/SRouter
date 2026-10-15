@@ -37,6 +37,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                 tool_calls: None,
                 tool_call_id: None,
                 cache_control: None,
+                reasoning_content: None,
             });
         }
     }
@@ -59,6 +60,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                     tool_calls: None,
                     tool_call_id: None,
                     cache_control: None,
+                    reasoning_content: None,
                 });
             }
             AnthropicMessageContent::Blocks(blocks) => {
@@ -166,6 +168,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                         },
                         tool_call_id: None,
                         cache_control: None,
+                        reasoning_content: None,
                     });
                 } else {
                     for (tool_call_id, result_content) in tool_results {
@@ -178,6 +181,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                             // `tool_call_id` key at all (probed).
                             tool_call_id: (!tool_call_id.is_empty()).then_some(tool_call_id),
                             cache_control: None,
+                            reasoning_content: None,
                         });
                     }
 
@@ -190,6 +194,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                                 tool_calls: None,
                                 tool_call_id: None,
                                 cache_control: None,
+                                reasoning_content: None,
                             });
                         }
                     } else if !parts.is_empty() {
@@ -200,6 +205,7 @@ pub fn anthropic_to_openai_request(req: AnthropicMessageRequest) -> ChatCompleti
                             tool_calls: None,
                             tool_call_id: None,
                             cache_control: None,
+                            reasoning_content: None,
                         });
                     }
                 }

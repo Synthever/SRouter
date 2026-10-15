@@ -109,6 +109,7 @@ fn system_message(content: &str) -> ChatMessage {
         tool_calls: None,
         tool_call_id: None,
         cache_control: None,
+        reasoning_content: None,
     }
 }
 
