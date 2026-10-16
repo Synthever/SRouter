@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
+use crate::features::providers::management::account_check::{AccountCheck, UNSTATED};
 use crate::features::providers::{ModelObject, ProviderMetadata, ProviderProtocol};
 use crate::infrastructure::database::providers::{CustomProviderRow, ProviderConnection};
 
@@ -165,6 +166,19 @@ impl ProviderModel {
     }
 }
 
+/// The three verdicts [`AccountCheck::health`] can report. Rendered as a closed
+/// union because the value is computed from the stored expiry, never read from
+/// storage.
+struct ConnectionHealth;
+
+impl specta::Type for ConnectionHealth {
+    fn definition(_: &mut specta::Types) -> specta::datatype::DataType {
+        specta::datatype::DataType::Reference(specta_typescript::define(
+            "\"active\" | \"expired\" | \"unstated\"",
+        ))
+    }
+}
+
 /// A connection as the detail response reports it. There is deliberately no
 /// credential field: a stored API key never leaves the database. The model
 /// prefix is reported as `prefix` (the row's `alias` column).
@@ -180,9 +194,19 @@ pub struct ProviderConnectionView {
     pub enabled: bool,
     #[specta(type = specta_typescript::Number)]
     pub created_at: i64,
+    /// The account check verdict: `active` while the stored token has not
+    /// lapsed, `expired` once it has, `unstated` when the store states no expiry.
+    #[specta(type = ConnectionHealth)]
+    pub health: &'static str,
+    /// The connection that holds the same account, when another one does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub duplicate_of: Option<String>,
 }
 
 impl From<&ProviderConnection> for ProviderConnectionView {
+    /// Builds the view with the account check left unanswered; the detail route
+    /// fills it through [`ProviderConnectionView::with_account_check`].
     fn from(connection: &ProviderConnection) -> Self {
         Self {
             id: connection.id.clone(),
@@ -194,7 +218,19 @@ impl From<&ProviderConnection> for ProviderConnectionView {
             base_url: connection.base_url.clone(),
             enabled: connection.enabled,
             created_at: connection.created_at,
+            health: UNSTATED,
+            duplicate_of: None,
         }
+    }
+}
+
+impl ProviderConnectionView {
+    /// Attaches the account check verdict of one connection.
+    pub fn with_account_check(mut self, check: &AccountCheck) -> Self {
+        self.health = check.health;
+        self.duplicate_of = check.duplicate_of.clone();
+
+        self
     }
 }
 

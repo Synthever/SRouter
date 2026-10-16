@@ -306,26 +306,34 @@ async fn poll_device_token(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|error| constants::providers::qoder::poll_transport_failed(&error))?;
+        .map_err(|_| constants::providers::qoder::poll_transport_failed())?;
     let status = response.status();
 
     if status.as_u16() == 202 || status.as_u16() == 404 {
         return Ok(None);
     }
+    let body_text = response.text().await.unwrap_or_default();
     if !status.is_success() {
-        let detail = response.text().await.unwrap_or_default();
-        return Err(constants::providers::qoder::poll_failed(
-            status.as_u16(),
-            &detail,
-        ));
+        return Err(constants::providers::qoder::poll_failed(status.as_u16()));
     }
 
-    let body = response
-        .json::<Value>()
-        .await
-        .map_err(|error| constants::providers::qoder::poll_failed(200, &error.to_string()))?;
+    let body: Value = serde_json::from_str(&body_text)
+        .map_err(|_| constants::providers::qoder::poll_failed(status.as_u16()))?;
+
+    if let Some(err_code) = body.get("errorCode").and_then(Value::as_str) {
+        if err_code == "NotFound" || err_code == "DeviceTokenNonceRequired" {
+            return Ok(None);
+        }
+        return Err(constants::providers::qoder::poll_failed(status.as_u16()));
+    }
+
     let token = body
         .get("token")
+        .or_else(|| body.get("access_token"))
+        .or_else(|| {
+            body.get("data")
+                .and_then(|d| d.get("token").or_else(|| d.get("access_token")))
+        })
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())

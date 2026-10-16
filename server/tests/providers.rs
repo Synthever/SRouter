@@ -69,6 +69,36 @@ async fn insert_provider(
     .unwrap();
 }
 
+/// Seeds one stored Qoder connection with the credential keys the account check
+/// reads: the account its user id names, and when its token stops working.
+async fn insert_qoder_connection(
+    pool: &sqlx::SqlitePool,
+    id: &str,
+    user_id: &str,
+    token_expires_at: Option<i64>,
+    created_at: i64,
+) {
+    sqlx::query(
+        "INSERT INTO providers (id, provider_id, name, category, protocol, base_url, enabled, \
+         credentials, meta, created_at) \
+         VALUES (?, 'qoder', ?, 'oauth', 'openai', 'https://api3.qoder.sh', 1, ?, '{}', ?)",
+    )
+    .bind(id)
+    .bind(format!("Qoder ({user_id})"))
+    .bind(
+        serde_json::json!({
+            "access_token": format!("token-{id}"),
+            "token_expires_at": token_expires_at,
+            "provider_specific_data": { "userId": user_id },
+        })
+        .to_string(),
+    )
+    .bind(created_at)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 /// A request carrying a valid admin-session cookie.
 fn admin_request(method: &str, uri: &str, body: serde_json::Value) -> Request<Body> {
     let cookie = format!("srouter_admin_session={SESSION_TOKEN}");
@@ -107,6 +137,17 @@ fn hidden_flag(body: &serde_json::Value, model_id: &str) -> Option<bool> {
 
 fn favorite_flag(body: &serde_json::Value, model_id: &str) -> Option<bool> {
     model_flag(body, model_id, "favorite")
+}
+
+/// One connection out of a provider detail body. The entry is always expected:
+/// a missing one means the detail view stopped listing a stored row.
+fn connection<'a>(body: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+    body["connections"]
+        .as_array()
+        .expect("the detail view lists connections")
+        .iter()
+        .find(|entry| entry["id"] == id)
+        .expect("the connection is listed")
 }
 
 async fn override_row_count(pool: &sqlx::SqlitePool, provider_id: &str, model_id: &str) -> i64 {
@@ -1339,6 +1380,44 @@ async fn the_round_robin_toggle_persists_the_flag_and_echoes_it() {
     assert_eq!(body["round_robin"], serde_json::json!(true));
 }
 
+/// The account check on the detail payload: the row that names an account twice
+/// is flagged against the newest of the two, and each row reports its own token
+/// state. Only the stored credential is read, so a driver that names no account
+/// (and a row that states no expiry) stays a verdict the check cannot give.
+#[tokio::test]
+async fn the_detail_view_flags_a_duplicate_account_and_the_token_state() {
+    let database = TestDatabase::new().unwrap();
+    let pool = sqlite(&database).await;
+    let now = srouter_server::clock::now_ms();
+
+    // Newest first: the keeper is the row created last, the expired one is the
+    // same account signed in again earlier.
+    insert_qoder_connection(&pool, "qoder_new", "user-1", Some(now + 60_000), 2_000).await;
+    insert_qoder_connection(&pool, "qoder_old", "user-1", Some(now - 60_000), 1_000).await;
+    insert_qoder_connection(&pool, "qoder_other", "user-2", None, 3_000).await;
+
+    let body = json_body(
+        app(&database)
+            .await
+            .oneshot(get_request("/v1/providers/qoder"))
+            .await
+            .unwrap(),
+    )
+    .await;
+
+    let keeper = connection(&body, "qoder_new");
+    assert_eq!(keeper["health"], "active");
+    assert!(keeper.get("duplicate_of").is_none());
+
+    let duplicate = connection(&body, "qoder_old");
+    assert_eq!(duplicate["duplicate_of"], "qoder_new");
+    assert_eq!(duplicate["health"], "expired");
+
+    let other = connection(&body, "qoder_other");
+    assert!(other.get("duplicate_of").is_none());
+    assert_eq!(other["health"], "unstated");
+}
+
 /// The catalog and detail payloads report rotation as on before anything is
 /// stored, which is the default the executor runs with.
 #[tokio::test]
@@ -1354,4 +1433,75 @@ async fn a_provider_without_a_stored_flag_reports_rotation_as_on() {
     .await;
 
     assert_eq!(detail["round_robin"], serde_json::json!(true));
+}
+
+/// Removing one connection: the row leaves storage and the detail view, an
+/// unauthenticated call is refused, and an id that belongs to another driver—or
+/// to nothing—is a `404` rather than a cross-driver delete.
+#[tokio::test]
+async fn removing_a_connection_deletes_the_row_and_refuses_another_driver() {
+    let database = TestDatabase::new().unwrap();
+    let pool = sqlite(&database).await;
+    let now = srouter_server::clock::now_ms();
+
+    insert_qoder_connection(&pool, "qoder_new", "user-1", Some(now + 60_000), 2_000).await;
+    insert_qoder_connection(&pool, "qoder_old", "user-1", Some(now + 60_000), 1_000).await;
+    insert_provider(&pool, "cline_1", "cline", true, "{}").await;
+
+    let app = app(&database).await;
+
+    let unauthenticated = with_loopback_client(json_request_with_headers(
+        "DELETE",
+        "/v1/providers/qoder/connections/qoder_old",
+        serde_json::json!(null),
+        &[],
+    ));
+    let response = app.clone().oneshot(unauthenticated).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let foreign = admin_request(
+        "DELETE",
+        "/v1/providers/qoder/connections/cline_1",
+        serde_json::json!(null),
+    );
+    let response = app.clone().oneshot(foreign).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let missing = admin_request(
+        "DELETE",
+        "/v1/providers/qoder/connections/qoder_gone",
+        serde_json::json!(null),
+    );
+    let response = app.clone().oneshot(missing).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let removed = admin_request(
+        "DELETE",
+        "/v1/providers/qoder/connections/qoder_old",
+        serde_json::json!(null),
+    );
+    let response = app.clone().oneshot(removed).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json_body(response).await["message"], "Connection deleted");
+
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM providers WHERE id = ?")
+        .bind("qoder_old")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining, 0);
+
+    let detail = json_body(
+        app.clone()
+            .oneshot(get_request("/v1/providers/qoder"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        detail["connections"].as_array().unwrap().len(),
+        1,
+        "the detail view drops the removed connection"
+    );
+    assert_eq!(detail["status"]["connected_count"], 1);
 }

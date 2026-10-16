@@ -152,13 +152,15 @@ pub async fn delete_provider(
     if !delete_custom_provider(database, &provider_id).await? {
         return Err(APIError::new(
             404,
-            format!("Connection '{provider_id}' not found"),
+            constants::providers::connection_not_found(&provider_id),
         ));
     }
 
     unregister_custom_provider(&state.providers, &provider_id);
 
-    Ok(Json(serde_json::json!({ "message": "Connection deleted" })))
+    Ok(Json(serde_json::json!({
+        "message": constants::providers::CONNECTION_DELETED
+    })))
 }
 
 /// `POST /v1/providers/verify` — probes an unsaved endpoint's `GET /models`.
@@ -215,7 +217,7 @@ pub async fn verify_connection(
     let Some(row) = find_custom_provider(database, connection_id).await? else {
         return Err(APIError::new(
             404,
-            format!("Connection '{connection_id}' not found"),
+            constants::providers::connection_not_found(connection_id),
         ));
     };
     let credentials = load_custom_credentials(database, connection_id)

@@ -1,17 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute, Link, useParams } from "@tanstack/react-router"
-import { ArrowLeft, Plus, RefreshCw, Search, Star } from "lucide-react"
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Network,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Star,
+} from "lucide-react"
 import { useMemo, useState } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import {
+  deleteProviderConnection,
   patchProvider,
   providerDetailQuery,
   toggleRoundRobin,
 } from "@/api/providers"
-import { Badge } from "@/components/arc/badge/badge"
+import type { ProviderConnectionView } from "@/api/types"
+import { Badge, type BadgeTone } from "@/components/arc/badge/badge"
 import { Button } from "@/components/arc/button/button"
 import { CopyButton } from "@/components/arc/copy-button/copy-button"
+import { EmptyState } from "@/components/arc/empty-state/empty-state"
+import HoldToConfirm from "@/components/arc/hold-to-confirm/hold-to-confirm"
+import { SearchField } from "@/components/arc/search-field/search-field"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/arc/tabs/tabs"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
+import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { ConnectAccountModal } from "@/components/providers/modals/ConnectAccounts"
 import { ProviderLogo } from "@/components/providers/provider-logo"
 import { Switch } from "@/components/ui/switch"
@@ -20,13 +42,67 @@ export const Route = createFileRoute("/_authenticated/providers/$providerId")({
   component: ProviderDetailPage,
 })
 
+/** What one connection row can say, and what it has to leave open. */
+type ConnectionStatus = {
+  tone: BadgeTone
+  label: string
+  detail: string
+}
+
+/**
+ * The stored state of one connection. The check is passive: it reads the
+ * credential row, so `active` means the token has not lapsed *on record* and
+ * says nothing about whether the provider revoked it early.
+ */
+function connectionStatus(
+  connection: ProviderConnectionView
+): ConnectionStatus {
+  if (!connection.enabled) {
+    return {
+      tone: "neutral",
+      label: "Disabled",
+      detail: "This connection is switched off, so rotation never picks it.",
+    }
+  }
+
+  switch (connection.health) {
+    case "active":
+      return {
+        tone: "success",
+        label: "Connected",
+        detail:
+          "The stored token has not lapsed. Storage cannot tell whether the provider revoked it early.",
+      }
+    case "expired":
+      return {
+        tone: "danger",
+        label: "Token expired",
+        detail:
+          "The stored token has already lapsed. Reconnect this account to route through it.",
+      }
+    case "unstated":
+      return {
+        tone: "neutral",
+        label: "Connected",
+        detail:
+          "This driver stores no token expiry, so the enabled flag is the only state on record.",
+      }
+  }
+
+  const unreachable: never = connection.health
+  return unreachable
+}
+
 function ProviderDetailPage() {
   const { providerId } = useParams({
     from: "/_authenticated/providers/$providerId",
   })
   const queryClient = useQueryClient()
-  const [modelSearch, setModelSearch] = useState("")
+  const reducedMotion = useReducedMotion() ?? false
   const [connectModalOpen, setConnectModalOpen] = useState(false)
+  const [modelSearch, setModelSearch] = useState("")
+  // Track IDs hidden from UI for exit animation
+  const [removedConnectionIDs, setRemovedConnectionIDs] = useState<string[]>([])
 
   const {
     data: provider,
@@ -81,9 +157,72 @@ function ProviderDetailPage() {
     },
   })
 
-  const models = provider?.models
+  const patchModelMutation = useMutation({
+    mutationFn: (payload: {
+      hide?: string[]
+      restore?: string[]
+      favorite?: string[]
+      unfavorite?: string[]
+    }) => patchProvider(providerId, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(
+        providerDetailQuery(providerId).queryKey,
+        updated
+      )
+      void queryClient.invalidateQueries({ queryKey: ["providers"] })
+      toast.success("Model preferences updated")
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update model settings"
+      )
+    },
+  })
+
+  const removeConnectionMutation = useMutation({
+    mutationFn: (connectionID: string) =>
+      deleteProviderConnection(providerId, connectionID),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["providers"] })
+    },
+    onError: (err, connectionID) => {
+      setRemovedConnectionIDs((prev) =>
+        prev.filter((id) => id !== connectionID)
+      )
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove the connection"
+      )
+    },
+  })
+
+  const connections = useMemo(() => {
+    const raw = provider?.connections ?? []
+    return raw.filter((c) => !removedConnectionIDs.includes(c.id))
+  }, [provider?.connections, removedConnectionIDs])
+
+  function handleRemoveConnection(connection: ProviderConnectionView) {
+    const connectionID = connection.id
+    setRemovedConnectionIDs((prev) => [...prev, connectionID])
+    removeConnectionMutation.mutate(connectionID)
+    toast.success(`Removed ${connection.name}`)
+  }
+
+  // Filter models so only models actually belonging to this provider are shown
+  // (e.g. `qoder/...` or owned_by === `qoder`)
+  const models = useMemo(() => {
+    const allModels = provider?.models ?? []
+    if (!provider) return []
+    const prefix = `${provider.id.toLowerCase()}/`
+    const owner = provider.id.toLowerCase()
+    return allModels.filter((m) => {
+      const id = m.id.toLowerCase()
+      const ownedBy = m.owned_by.toLowerCase()
+      return id.startsWith(prefix) || ownedBy === owner
+    })
+  }, [provider])
+
   const filteredModels = useMemo(() => {
-    if (!models) return []
+    if (!models || models.length === 0) return []
     if (!modelSearch.trim()) return models
     const q = modelSearch.toLowerCase()
     return models.filter(
@@ -121,8 +260,8 @@ function ProviderDetailPage() {
           <ArrowLeft size={14} aria-hidden="true" />
           <span>Back to providers</span>
         </Link>
-        <div className="border-danger/30 bg-danger/10 rounded-xl border p-6 text-center">
-          <p className="text-danger text-sm font-medium">
+        <div className="rounded-xl border border-danger/30 bg-danger/10 p-6 text-center">
+          <p className="text-sm font-medium text-danger">
             {error instanceof Error ? error.message : "Provider not found"}
           </p>
           <Button
@@ -139,7 +278,6 @@ function ProviderDetailPage() {
   }
 
   const isLive = provider.status.connected_count > 0
-  const connections = provider.connections ?? []
 
   return (
     <div className="flex flex-col gap-6">
@@ -242,262 +380,365 @@ function ProviderDetailPage() {
         </div>
       </div>
 
-      {/* Grid: Settings & Account Overview */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left Column: Accounts & Models (Span 2) */}
-        <div className="flex flex-col gap-6 lg:col-span-2">
-          {/* Active Accounts & Connections */}
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="flex items-center justify-between border-b border-border/70 pb-3.5">
-              <div>
-                <h2 className="text-sm font-medium text-foreground">
-                  Active connections
-                </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Configured accounts and authentication sessions under this
-                  driver.
-                </p>
+      {/* Tab Navigation: Connections vs Models */}
+      <Tabs defaultValue="connections" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger
+            value="connections"
+            className="flex items-center gap-1.5"
+          >
+            <Network size={14} aria-hidden="true" />
+            <span>Connections & Routing</span>
+            <span className="py-0.2 ml-1 rounded-full bg-surface-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+              {connections.length}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="models" className="flex items-center gap-1.5">
+            <Sparkles size={14} aria-hidden="true" />
+            <span>Supported Models</span>
+            <span className="py-0.2 ml-1 rounded-full bg-surface-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+              {models.length}
+            </span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Tab 1: Connections & Routing Settings */}
+        <TabsContent value="connections">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Active Accounts & Connections (Span 2) */}
+            <div className="rounded-[var(--radius-panel)] border border-border bg-surface p-5 lg:col-span-2">
+              <div className="flex items-center justify-between border-b border-border/70 pb-3.5">
+                <div>
+                  <h2 className="text-sm font-medium text-foreground">
+                    Active connections
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Configured accounts and authentication sessions under this
+                    driver.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConnectModalOpen(true)}
+                  className="flex items-center gap-1.5"
+                >
+                  <Plus size={12} aria-hidden="true" />
+                  <span>Add account</span>
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setConnectModalOpen(true)}
-                className="flex items-center gap-1.5"
-              >
-                <Plus size={12} aria-hidden="true" />
-                <span>Add account</span>
-              </Button>
+
+              {connections.length > 0 ? (
+                <div className="mt-4 divide-y divide-border/50 overflow-hidden">
+                  <AnimatePresence initial={false}>
+                    {connections.map((conn) => {
+                      const status = connectionStatus(conn)
+                      const duplicate = connections.find(
+                        (other) => other.id === conn.duplicate_of
+                      )
+
+                      return (
+                        <motion.div
+                          key={conn.id}
+                          layout="position"
+                          initial={
+                            reducedMotion
+                              ? { opacity: 1 }
+                              : { opacity: 0, x: -16 }
+                          }
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={
+                            reducedMotion
+                              ? { opacity: 0 }
+                              : {
+                                  opacity: 0,
+                                  x: 48,
+                                  height: 0,
+                                  paddingTop: 0,
+                                  paddingBottom: 0,
+                                  transition: {
+                                    duration: 0.28,
+                                    ease: [0.32, 0, 0.67, 0],
+                                  },
+                                }
+                          }
+                          className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-medium text-foreground">
+                                {conn.name}
+                              </span>
+                              {conn.prefix && (
+                                <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                                  prefix: {conn.prefix}
+                                </span>
+                              )}
+                              {duplicate && (
+                                <Tooltip
+                                  content={`Same account as ${duplicate.name}. Keep one of the two.`}
+                                >
+                                  <span className="inline-flex">
+                                    <Badge tone="warning" size="sm">
+                                      Duplicate account
+                                    </Badge>
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </div>
+                            <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+                              {conn.base_url || provider.default_base_url}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Tooltip content={status.detail}>
+                              <span className="inline-flex">
+                                <Badge tone={status.tone} size="sm">
+                                  {status.label}
+                                </Badge>
+                              </span>
+                            </Tooltip>
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {new Date(conn.created_at).toLocaleDateString()}
+                            </span>
+                            <HoldToConfirm
+                              label="Hold to remove"
+                              confirmedLabel="Removed"
+                              tone="danger"
+                              size="sm"
+                              disabled={removeConnectionMutation.isPending}
+                              onConfirm={() => handleRemoveConnection(conn)}
+                            />
+                          </div>
+                        </motion.div>
+                      )
+                    })}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg bg-surface-muted/40 p-5 text-center">
+                  <p className="text-xs font-medium text-foreground">
+                    {provider.status.message}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {provider.requires_oauth
+                      ? "Requires OAuth authentication token to establish live connections."
+                      : provider.requires_api_key
+                        ? "Requires valid API key or upstream endpoint configuration."
+                        : "Ready for unlimited local or free tier routing."}
+                  </p>
+                  {(provider.requires_oauth || provider.requires_api_key) && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setConnectModalOpen(true)}
+                      className="mt-3.5 inline-flex items-center gap-1.5"
+                    >
+                      <Plus size={13} aria-hidden="true" />
+                      <span>Connect account now</span>
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {connections.length > 0 ? (
-              <div className="mt-4 divide-y divide-border/50">
-                {connections.map((conn) => (
-                  <div
-                    key={conn.id}
-                    className="flex flex-col gap-2 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-foreground">
-                          {conn.name}
-                        </span>
-                        {conn.prefix && (
-                          <span className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                            prefix: {conn.prefix}
-                          </span>
-                        )}
-                      </div>
-                      <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
-                        {conn.base_url || provider.default_base_url}
-                      </span>
-                    </div>
+            {/* Traffic Rotation Configuration */}
+            <div className="flex flex-col gap-4">
+              <div className="space-y-4 rounded-[var(--radius-panel)] border border-border bg-surface p-5">
+                <h2 className="text-sm font-medium text-foreground">
+                  Traffic rotation
+                </h2>
 
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        tone={conn.enabled ? "success" : "neutral"}
-                        size="sm"
-                      >
-                        {conn.enabled ? "Connected" : "Disabled"}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(conn.created_at * 1000).toLocaleDateString()}
-                      </span>
-                    </div>
+                <div className="flex items-start justify-between gap-3 pt-1">
+                  <div>
+                    <span className="block text-xs font-medium text-foreground">
+                      Round-robin balancing
+                    </span>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Distributes incoming requests evenly across all active
+                      accounts.
+                    </p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg bg-surface-muted/40 p-4 text-center">
-                <p className="text-xs font-medium text-foreground">
-                  {provider.status.message}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {provider.requires_oauth
-                    ? "Requires OAuth authentication token to establish live connections."
-                    : provider.requires_api_key
-                      ? "Requires valid API key or upstream endpoint configuration."
-                      : "Ready for unlimited local or free tier routing."}
-                </p>
-                {(provider.requires_oauth || provider.requires_api_key) && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setConnectModalOpen(true)}
-                    className="mt-3 inline-flex items-center gap-1.5"
-                  >
-                    <Plus size={13} aria-hidden="true" />
-                    <span>Connect account now</span>
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* Advertised Models */}
-          <div className="rounded-xl border border-border bg-surface p-5">
+                  <Switch
+                    checked={provider.round_robin}
+                    onCheckedChange={(val) =>
+                      toggleRoundRobinMutation.mutate(val)
+                    }
+                    disabled={toggleRoundRobinMutation.isPending}
+                    aria-label="Toggle round-robin balancing"
+                  />
+                </div>
+              </div>
+
+              {/* Endpoint reference card */}
+              <div className="space-y-3 rounded-[var(--radius-panel)] border border-border bg-surface p-5">
+                <h2 className="text-sm font-medium text-foreground">
+                  Endpoint reference
+                </h2>
+                <div>
+                  <span className="text-xs text-muted-foreground">
+                    Default upstream URL
+                  </span>
+                  <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1.5">
+                    <span className="truncate font-mono text-xs text-foreground">
+                      {provider.default_base_url}
+                    </span>
+                    <CopyButton
+                      value={provider.default_base_url}
+                      iconOnly
+                      variant="plain"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Tab 2: Supported Models Catalog */}
+        <TabsContent value="models">
+          <div className="rounded-[var(--radius-panel)] border border-border bg-surface p-5">
             <div className="flex flex-col gap-3 border-b border-border/70 pb-3.5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-medium text-foreground">
-                  Supported models
+                  Advertised models
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Catalog models advertised by this driver.
+                  Models routed to this driver. Toggle favorites or hide models
+                  from client discovery.
                 </p>
               </div>
 
-              <div className="relative max-w-xs">
-                <Search
-                  size={13}
-                  className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <input
-                  type="text"
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Filter models..."
-                  className="h-8 rounded-lg border border-border bg-surface pr-2.5 pl-8 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-foreground"
-                />
-              </div>
+              <SearchField
+                label="Search models"
+                id="model-filter"
+                value={modelSearch}
+                onValueChange={setModelSearch}
+                placeholder="Filter models by id or owner..."
+                className="w-full sm:max-w-xs"
+              />
             </div>
 
             {filteredModels.length > 0 ? (
-              <div className="mt-3.5 max-h-96 divide-y divide-border/40 overflow-y-auto">
-                {filteredModels.map((model) => (
+              <div className="mt-3 divide-y divide-border/40">
+                {filteredModels.map((m) => (
                   <div
-                    key={model.id}
-                    className="flex items-center justify-between py-2.5 text-xs"
+                    key={m.id}
+                    className="flex items-center justify-between py-2.5 text-xs transition-colors hover:bg-surface-muted/20 sm:px-2"
                   >
-                    <div className="min-w-0 pr-3">
-                      <span className="font-mono text-xs text-foreground">
-                        {model.id}
-                      </span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        by {model.owned_by}
-                      </span>
+                    <div className="flex min-w-0 items-center gap-2.5 pr-3">
+                      <Tooltip
+                        content={
+                          m.favorite ? "Unmark favorite" : "Mark as favorite"
+                        }
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (m.favorite) {
+                              patchModelMutation.mutate({ unfavorite: [m.id] })
+                            } else {
+                              patchModelMutation.mutate({ favorite: [m.id] })
+                            }
+                          }}
+                          className={`cursor-pointer transition-colors ${
+                            m.favorite
+                              ? "text-warning hover:text-warning/80"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          aria-label={
+                            m.favorite ? "Unfavorite model" : "Favorite model"
+                          }
+                        >
+                          <Star
+                            size={14}
+                            fill={m.favorite ? "currentColor" : "none"}
+                          />
+                        </button>
+                      </Tooltip>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-mono text-xs font-medium ${
+                              m.hidden
+                                ? "text-muted-foreground line-through"
+                                : "text-foreground"
+                            }`}
+                          >
+                            {m.id}
+                          </span>
+                          <CopyButton value={m.id} iconOnly variant="plain" />
+                        </div>
+                        <span className="block text-[11px] text-muted-foreground">
+                          owned by {m.owned_by}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {model.favorite && (
-                        <span title="Favorite model" className="text-warning">
-                          <Star size={12} fill="currentColor" />
-                        </span>
-                      )}
-                      {model.hidden ? (
-                        <Badge tone="warning" size="sm">
-                          Hidden
-                        </Badge>
-                      ) : (
-                        <Badge tone="neutral" size="sm">
-                          Active
-                        </Badge>
-                      )}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Tooltip
+                        content={
+                          m.hidden
+                            ? "Restore to /v1/models"
+                            : "Hide from /v1/models catalog"
+                        }
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (m.hidden) {
+                              patchModelMutation.mutate({ restore: [m.id] })
+                            } else {
+                              patchModelMutation.mutate({ hide: [m.id] })
+                            }
+                          }}
+                          className="h-7 px-2 text-xs"
+                        >
+                          {m.hidden ? (
+                            <>
+                              <EyeOff
+                                size={13}
+                                className="text-warning"
+                                aria-hidden="true"
+                              />
+                              <span className="hidden sm:inline">Hidden</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye
+                                size={13}
+                                className="text-muted-foreground"
+                                aria-hidden="true"
+                              />
+                              <span className="hidden sm:inline">Active</span>
+                            </>
+                          )}
+                        </Button>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="mt-4 p-4 text-center text-xs text-muted-foreground">
-                {modelSearch
-                  ? "No model matches your filter query."
-                  : "No models currently advertised by this driver."}
-              </div>
+              <EmptyState
+                label="Model catalog"
+                title={
+                  modelSearch ? "No matching models" : "No models advertised"
+                }
+                description={
+                  modelSearch
+                    ? "Try adjusting your search query."
+                    : "This driver has not advertised any models in its catalog yet."
+                }
+              />
             )}
           </div>
-        </div>
-
-        {/* Right Column: Routing Rules & Driver Specifications */}
-        <div className="flex flex-col gap-6">
-          {/* Routing Configuration */}
-          <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-medium text-foreground">
-              Traffic rotation
-            </h2>
-
-            <div className="flex items-start justify-between gap-3 pt-1">
-              <div>
-                <span className="block text-xs font-medium text-foreground">
-                  Round-robin balancing
-                </span>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Distributes incoming requests evenly across all active
-                  accounts.
-                </p>
-              </div>
-
-              <Button
-                variant={provider.round_robin ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() =>
-                  toggleRoundRobinMutation.mutate(!provider.round_robin)
-                }
-                disabled={toggleRoundRobinMutation.isPending}
-                className="shrink-0 text-xs"
-              >
-                {provider.round_robin ? "Enabled" : "Disabled"}
-              </Button>
-            </div>
-          </div>
-
-          {/* Upstream Technical Specifications */}
-          <div className="space-y-3.5 rounded-xl border border-border bg-surface p-5">
-            <h2 className="text-sm font-medium text-foreground">
-              Driver specifications
-            </h2>
-
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">
-                Default base endpoint
-              </span>
-              <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-muted/60 px-2.5 py-1.5">
-                <span className="truncate font-mono text-xs text-foreground">
-                  {provider.default_base_url}
-                </span>
-                <CopyButton
-                  value={provider.default_base_url}
-                  iconOnly
-                  variant="plain"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  Protocol
-                </span>
-                <span className="mt-1 block font-mono text-xs text-foreground">
-                  {provider.protocol}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  OAuth Required
-                </span>
-                <span className="mt-1 block text-xs text-foreground">
-                  {provider.requires_oauth ? "Yes" : "No"}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  API Key Required
-                </span>
-                <span className="mt-1 block text-xs text-foreground">
-                  {provider.requires_api_key ? "Yes" : "No"}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">
-                  Custom URL
-                </span>
-                <span className="mt-1 block text-xs text-foreground">
-                  {provider.supports_custom_url ? "Supported" : "Fixed"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <ConnectAccountModal
         open={connectModalOpen}

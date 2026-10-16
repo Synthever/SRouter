@@ -96,6 +96,43 @@ pub async fn list_connections(database: &AppDatabase) -> Result<Vec<ProviderConn
     Ok(connections)
 }
 
+/// Reads one stored connection by its internal id. A seed row—or an unknown
+/// id—reads as absent, because [`list_connections`] drops the driver rows.
+pub async fn find_connection(
+    database: &AppDatabase,
+    id: &str,
+) -> Result<Option<ProviderConnection>, APIError> {
+    Ok(list_connections(database)
+        .await?
+        .into_iter()
+        .find(|connection| connection.id == id))
+}
+
+/// Deletes one stored connection. Returns whether a row was removed, so the
+/// route can answer `404`. The id is checked against [`find_connection`] first,
+/// which keeps a seed driver row—a row `list_connections` never reports—out of
+/// reach of a raw id guess.
+pub async fn delete_connection(database: &AppDatabase, id: &str) -> Result<bool, APIError> {
+    if find_connection(database, id).await?.is_none() {
+        return Ok(false);
+    }
+
+    let pool = database.sqlite_required(constants::database::PROVIDERS_UNSUPPORTED)?;
+    let affected = sqlx::query("DELETE FROM providers WHERE id = ?")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|error| {
+            APIError::new(
+                500,
+                constants::database::with_context("delete the provider connection", error),
+            )
+        })?
+        .rows_affected();
+
+    Ok(affected > 0)
+}
+
 /// A provider row read for quota inspection, with credentials included.
 #[derive(Clone, Debug)]
 pub struct ProviderForQuota {

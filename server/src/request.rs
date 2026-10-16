@@ -244,7 +244,7 @@ mod tests {
         );
 
         assert_eq!(
-            client_address(&parts.headers, &parts.extensions, false).as_deref(),
+            client_address(&parts.headers, &parts.extensions, true).as_deref(),
             Some("2001:db8::1")
         );
     }

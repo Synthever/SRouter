@@ -367,6 +367,15 @@ pub mod providers {
         format!("Provider '{provider_id}' not found")
     }
 
+    /// The message both connection delete routes answer when the id names no
+    /// stored connection.
+    pub fn connection_not_found(connection_id: impl std::fmt::Display) -> String {
+        format!("Connection '{connection_id}' not found")
+    }
+
+    /// The `message` both connection delete routes answer on success.
+    pub const CONNECTION_DELETED: &str = "Connection deleted";
+
     /// The `Invalid model payload` message the `/v1/models` writes return when
     /// the body is missing a usable `model_id` or is not a JSON object. Wording
     /// is frozen against `apps/api/src/controllers/favorites.controller.ts`.
@@ -559,16 +568,16 @@ pub mod providers {
             format!("could not wrap the Qoder request key: {error}")
         }
 
-        pub fn poll_failed(status: u16, detail: &str) -> String {
-            format!("Qoder device token poll failed ({status}): {detail}")
+        pub fn poll_failed(status: u16) -> String {
+            format!("Qoder device token poll failed ({status})")
         }
 
         pub fn userinfo_failed(status: u16) -> String {
             format!("Qoder userinfo request failed ({status})")
         }
 
-        pub fn poll_transport_failed(error: impl std::fmt::Display) -> String {
-            format!("Qoder device token poll failed: {error}")
+        pub fn poll_transport_failed() -> String {
+            "Qoder device token poll failed".to_owned()
         }
     }
 

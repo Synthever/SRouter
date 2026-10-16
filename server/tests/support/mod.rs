@@ -267,6 +267,8 @@ pub struct FakeQoderState {
     pub last_model_list_body_length: String,
     pub last_model_list_sig_path: String,
     pub model_catalog: serde_json::Value,
+    pub poll_status: u16,
+    pub poll_body: String,
 }
 
 impl Default for FakeQoderState {
@@ -287,6 +289,8 @@ impl Default for FakeQoderState {
             last_model_list_body_length: String::new(),
             last_model_list_sig_path: String::new(),
             model_catalog: serde_json::json!({ "chat": [] }),
+            poll_status: 200,
+            poll_body: String::new(),
         }
     }
 }
@@ -1332,14 +1336,37 @@ async fn qoder_model_list(State(state): State<SharedQoderState>, headers: Header
 }
 
 async fn qoder_device_poll(State(state): State<SharedQoderState>) -> Response {
-    let approved = {
+    let (approved, poll_status, poll_body) = {
         let mut guard = state.lock().expect("fake qoder state");
         guard.poll_requests += 1;
-        guard.approve_device
+        (
+            guard.approve_device,
+            guard.poll_status,
+            guard.poll_body.clone(),
+        )
     };
+
+    if poll_status != 200 {
+        let status = StatusCode::from_u16(poll_status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        return (
+            status,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            poll_body,
+        )
+            .into_response();
+    }
 
     if !approved {
         return StatusCode::ACCEPTED.into_response();
+    }
+
+    if !poll_body.is_empty() {
+        return (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            poll_body,
+        )
+            .into_response();
     }
 
     Json(serde_json::json!({

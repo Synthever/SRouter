@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { addCustomProvider, providersListQuery } from "@/api/providers"
-import type { ProviderProtocol } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Alert } from "@/components/arc/alert/alert"
 import { Badge } from "@/components/arc/badge/badge"
@@ -13,10 +12,16 @@ import ChipGroup from "@/components/arc/chip-group/chip-group"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
 import { SearchField } from "@/components/arc/search-field/search-field"
 import { Skeleton } from "@/components/arc/skeleton/skeleton"
+import { useSearch } from "@/hooks/useSearch"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { SectionHeader } from "@/components/layout/section-header"
 import { AddCustomProviderDialog } from "@/components/providers/add-custom-provider-dialog"
 import { ProviderLogo } from "@/components/providers/provider-logo"
+
+import {
+  categoryLabel,
+  PROTOCOL_LABELS,
+} from "@/components/providers/provider-labels"
 
 export const Route = createFileRoute("/_authenticated/providers/")({
   component: ProvidersListPage,
@@ -33,32 +38,13 @@ const CATEGORIES = [
 type CategoryFilter = (typeof CATEGORIES)[number]["id"]
 type AddCustomProviderInput = Parameters<typeof addCustomProvider>[0]
 
-const PROTOCOL_LABELS = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  custom: "Custom",
-} satisfies Record<ProviderProtocol, string>
+const SEARCH_KEYS = ["name", "id", "protocol"] as const
 
 /* The rail and the topbar take their width out of the viewport before this grid
    sees any of it, so a viewport breakpoint here overstates the room a card has.
    One column until the content column is wide enough for two cards at their
    natural size, then three only on a wide desk. */
 const CARD_GRID = "grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3"
-
-function categoryLabel(category: string) {
-  switch (category) {
-    case "oauth":
-      return "OAuth"
-    case "api_key":
-      return "API key"
-    case "free_tier":
-      return "Free tier"
-    case "custom_provider":
-      return "Custom"
-    default:
-      return category.replaceAll("_", " ")
-  }
-}
 
 function connectionLabel(count: number) {
   return `${count} ${count === 1 ? "connection" : "connections"}`
@@ -67,7 +53,6 @@ function connectionLabel(count: number) {
 function ProvidersListPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [search, setSearch] = useState("")
   const [selectedCategory, setSelectedCategory] =
     useState<CategoryFilter>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -76,17 +61,20 @@ function ProvidersListPage() {
     useQuery(providersListQuery)
   const addProvider = useMutation({ mutationFn: addCustomProvider })
   const providers = data?.data ?? []
-  const normalizedSearch = search.trim().toLowerCase()
-  const filteredProviders = providers.filter((provider) => {
-    const matchesSearch =
-      normalizedSearch === "" ||
-      provider.name.toLowerCase().includes(normalizedSearch) ||
-      provider.id.toLowerCase().includes(normalizedSearch) ||
-      provider.protocol.toLowerCase().includes(normalizedSearch)
-    const matchesCategory =
-      selectedCategory === "all" || provider.category === selectedCategory
-    return matchesSearch && matchesCategory
+  const {
+    query: search,
+    setQuery: setSearch,
+    hasQuery,
+    filteredItems: searchedProviders,
+    fieldProps: searchFieldProps,
+  } = useSearch(providers, {
+    keys: SEARCH_KEYS,
   })
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredProviders = searchedProviders.filter(
+    (provider) =>
+      selectedCategory === "all" || provider.category === selectedCategory
+  )
   // A category is a facet, so the chips read as a filter, not as a view switch:
   // they narrow the list below and the count rides in the label.
   const categoryOptions = CATEGORIES.map((category) => {
@@ -101,7 +89,7 @@ function ProvidersListPage() {
       label: count === null ? category.label : `${category.label} ${count}`,
     }
   })
-  const filtersActive = normalizedSearch !== "" || selectedCategory !== "all"
+  const filtersActive = hasQuery || selectedCategory !== "all"
 
   useEffect(() => {
     if (!data || isFetching) return
@@ -184,10 +172,9 @@ function ProvidersListPage() {
         <SearchField
           id="provider-search"
           label="Search providers"
-          value={search}
-          onValueChange={setSearch}
           placeholder="Filter by name, id, or protocol..."
           className="w-full sm:max-w-xs"
+          {...searchFieldProps}
         />
         <ChipGroup
           label="Filter by category"

@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import {
   completeOAuthCallback,
   initiateOAuthLogin,
+  pollOAuthSession,
   type OAuthLoginResult,
 } from "@/api/providers"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
@@ -23,6 +24,54 @@ export default function useOAuthFlow({
   const [callbackInput, setCallbackInput] = useState("")
   const [pending, setPending] = useState(false)
   const { paste } = useClipboard()
+
+  const normalized = providerID.toLowerCase()
+  const isDeviceFlow =
+    normalized.includes("qoder") ||
+    normalized.includes("cline") ||
+    normalized.includes("codebuddy")
+
+  useEffect(() => {
+    if (!oauthData?.state || !isDeviceFlow) {
+      return
+    }
+
+    const stateToken = oauthData.state
+    let cancelled = false
+    let inFlight = false
+
+    const poll = async () => {
+      if (inFlight) return
+      inFlight = true
+      try {
+        const res = await pollOAuthSession(providerID, stateToken)
+        if (res.status === "ok") {
+          if (cancelled) return
+          window.clearInterval(interval)
+          setOauthData(null)
+          setCallbackInput("")
+          toast.success("Account connected successfully!")
+          onSuccess()
+          onOpenChange(false)
+        }
+      } catch {
+        // Ignored; poll keeps trying until dismissed or approved
+      } finally {
+        inFlight = false
+      }
+    }
+
+    // StrictMode replays effects in development; defer the first request until
+    // the interval established by the surviving setup fires.
+    const interval = window.setInterval(() => {
+      void poll()
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [oauthData?.state, isDeviceFlow, providerID, onSuccess, onOpenChange])
 
   async function start() {
     setPending(true)
@@ -93,6 +142,8 @@ export default function useOAuthFlow({
     callbackInput,
     setCallbackInput,
     pending,
+    isPolling: Boolean(oauthData?.state && isDeviceFlow),
+    isDeviceFlow,
     start,
     pasteCallback,
     complete,

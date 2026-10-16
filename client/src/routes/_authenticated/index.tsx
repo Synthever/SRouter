@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { Cpu, Download, Radio } from "lucide-react"
+import { Cpu, Download, Radio, Zap } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { analyticsQuery, type AnalyticsWindow, useLogEvents } from "@/api/logs"
@@ -12,7 +12,6 @@ import {
   type LineChartDatum,
   type LineChartSeries,
 } from "@/components/arc/line-chart/line-chart"
-import { MetricCard } from "@/components/arc/metric-card/metric-card"
 import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
 import {
   SortableDataTable,
@@ -32,39 +31,36 @@ const RANGE_OPTIONS: { value: AnalyticsWindow; label: string }[] = [
   { value: "30d", label: "30d" },
 ]
 
-type Metric = "requests" | "latency"
+type Metric = "tokens" | "requests"
 
 const METRIC_OPTIONS = [
+  { value: "tokens", label: "Tokens" },
   { value: "requests", label: "Requests" },
-  { value: "latency", label: "Latency" },
 ]
 
 /** The question the plot answers, in the terms the operator asks it. It follows
  * the metric switch, so the heading always names what is actually drawn. */
 const WINDOW_QUESTIONS: Record<Metric, Record<AnalyticsWindow, string>> = {
+  tokens: {
+    "1h": "Token throughput per minute, past hour?",
+    "24h": "Token throughput per hour, past day?",
+    "7d": "Token throughput per 6 hours, past week?",
+    "30d": "Token throughput per day, past month?",
+  },
   requests: {
     "1h": "How many requests per minute, past hour?",
     "24h": "How many requests per hour, past day?",
     "7d": "How many requests per 6 hours, past week?",
     "30d": "How many requests per day, past month?",
   },
-  latency: {
-    "1h": "How slow was the upstream per minute, past hour?",
-    "24h": "How slow was the upstream per hour, past day?",
-    "7d": "How slow was the upstream per 6 hours, past week?",
-    "30d": "How slow was the upstream per day, past month?",
-  },
 }
 
-/**
- * Both series come from the same window and the same rows, so they are
- * comparable; the metric switch exists because they share one axis and a few
- * dozen requests plotted against a two-second latency flattens the request line
- * into the baseline, where it reads as an axis rather than as data.
- */
 const SERIES: LineChartSeries[] = [
+  { key: "total_tokens", label: "Total tokens", area: true },
+  { key: "prompt_tokens", label: "Input" },
+  { key: "completion_tokens", label: "Output" },
+  { key: "cached_tokens", label: "Cached", dashed: true },
   { key: "requests", label: "Requests", area: true },
-  { key: "latency", label: "Latency", dashed: true },
 ]
 
 interface ModelMetricRow extends Record<string, unknown> {
@@ -150,9 +146,9 @@ const TABLE_COLUMNS: DataColumn<ModelMetricRow>[] = [
   },
 ]
 
-export function OverviewPage() {
+function OverviewPage() {
   const [range, setRange] = useState<AnalyticsWindow>("24h")
-  const [metric, setMetric] = useState<Metric>("requests")
+  const [metric, setMetric] = useState<Metric>("tokens")
 
   const {
     data: analytics,
@@ -173,6 +169,25 @@ export function OverviewPage() {
   // it from the last 60 seconds, so it was the one card that did not answer the
   // selected range.
   const errorRate = (analytics?.error_rate ?? 0) * 100
+
+  // Buckets cover the full window; top_models is intentionally limited to ten.
+  const tokenTotals = useMemo(() => {
+    if (!analytics?.buckets || analytics.buckets.length === 0) {
+      return { prompt: 0, completion: 0, cached: 0, total: 0, hitRate: 0 }
+    }
+    let prompt = 0
+    let completion = 0
+    let cached = 0
+    let total = 0
+    for (const bucket of analytics.buckets) {
+      prompt += bucket.prompt_tokens
+      completion += bucket.completion_tokens
+      cached += bucket.cached_tokens
+      total += bucket.total_tokens
+    }
+    const hitRate = prompt > 0 ? (cached / prompt) * 100 : 0
+    return { prompt, completion, cached, total, hitRate }
+  }, [analytics])
 
   const chartData: LineChartDatum[] = useMemo(() => {
     if (!analytics?.buckets || analytics.buckets.length === 0) {
@@ -221,7 +236,10 @@ export function OverviewPage() {
         axisLabel,
         values: {
           requests: bucket.total_requests,
-          latency: Math.round(bucket.avg_latency_ms ?? 0),
+          total_tokens: bucket.total_tokens,
+          prompt_tokens: bucket.prompt_tokens,
+          completion_tokens: bucket.completion_tokens,
+          cached_tokens: bucket.cached_tokens,
         },
       }
     })
@@ -319,38 +337,142 @@ export function OverviewPage() {
         </section>
       ) : (
         <>
-          {/* KPI Row using UIARC MetricCard */}
+          {/* Telemetry Summary & Token Ratio Section */}
           <section
-            className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
+            className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-12"
             aria-label={`Key gateway telemetry, past ${range}`}
           >
-            <MetricCard
-              label="Requests"
-              value={totalRequests}
-              context={`past ${range}`}
-            />
-            <MetricCard
-              label="P95 latency"
-              value={latencyP95}
-              suffix=" ms"
-              context="upstream response time"
-            />
-            <MetricCard
-              label="Error rate"
-              value={errorRate}
-              suffix="%"
-              decimals={1}
-              context={`failed requests, past ${range}`}
-            />
-            <MetricCard
-              label="Est. spend"
-              value={windowCost}
-              prefix="$"
-              // Cents are the smallest unit anyone acts on; four decimals on a
-              // currency figure reads as leaked float precision, not data.
-              decimals={2}
-              context={`past ${range}`}
-            />
+            {/* Core KPI metrics in a streamlined card */}
+            <div className="flex flex-col justify-between rounded-[var(--radius-surface)] border border-border bg-card p-4 shadow-[var(--shadow-resting)] sm:p-5 lg:col-span-7">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Requests
+                  </div>
+                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                    {totalRequests.toLocaleString()}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    past {range}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    P95 Latency
+                  </div>
+                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                    {latencyP95}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ms
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    upstream time
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Error Rate
+                  </div>
+                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                    {errorRate.toFixed(1)}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    failures
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Est. Spend
+                  </div>
+                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                    ${windowCost.toFixed(2)}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    past {range}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Token Traffic & Cache Efficiency breakdown */}
+            <div className="flex flex-col justify-between rounded-[var(--radius-surface)] border border-border bg-card p-4 shadow-[var(--shadow-resting)] sm:p-5 lg:col-span-5">
+              <div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                    <Zap
+                      size={13}
+                      className="text-foreground"
+                      aria-hidden="true"
+                    />
+                    <span>Token Throughput</span>
+                  </div>
+                  <span className="text-xs font-medium text-foreground tabular-nums">
+                    {tokenTotals.total.toLocaleString()} total
+                  </span>
+                </div>
+
+                {/* Ratio bar */}
+                <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+                  <div
+                    style={{
+                      width: `${tokenTotals.total > 0 ? (tokenTotals.prompt / tokenTotals.total) * 100 : 0}%`,
+                    }}
+                    className="bg-foreground transition-all duration-300"
+                    title={`Input: ${tokenTotals.prompt.toLocaleString()}`}
+                  />
+                  <div
+                    style={{
+                      width: `${tokenTotals.total > 0 ? (tokenTotals.completion / tokenTotals.total) * 100 : 0}%`,
+                    }}
+                    className="bg-muted-foreground/60 transition-all duration-300"
+                    title={`Output: ${tokenTotals.completion.toLocaleString()}`}
+                  />
+                </div>
+              </div>
+
+              {/* Details & Cache stats */}
+              <div className="mt-3.5 flex flex-wrap items-center justify-between gap-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1">
+                    <span
+                      className="size-1.5 rounded-full bg-foreground"
+                      aria-hidden="true"
+                    />
+                    <span>In:</span>
+                    <strong className="font-medium text-foreground tabular-nums">
+                      {tokenTotals.prompt.toLocaleString()}
+                    </strong>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span
+                      className="size-1.5 rounded-full bg-muted-foreground/60"
+                      aria-hidden="true"
+                    />
+                    <span>Out:</span>
+                    <strong className="font-medium text-foreground tabular-nums">
+                      {tokenTotals.completion.toLocaleString()}
+                    </strong>
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span>Cache Hit:</span>
+                  <Badge
+                    tone={tokenTotals.hitRate > 0 ? "success" : "neutral"}
+                    size="sm"
+                  >
+                    {tokenTotals.hitRate.toFixed(1)}%
+                  </Badge>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* Traffic Trend Section using UIARC LineChart */}
@@ -382,13 +504,20 @@ export function OverviewPage() {
                 data={chartData}
                 series={SERIES}
                 hiddenSeries={
-                  metric === "requests" ? ["latency"] : ["requests"]
+                  metric === "tokens"
+                    ? ["requests"]
+                    : [
+                        "total_tokens",
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "cached_tokens",
+                      ]
                 }
                 label="Gateway telemetry"
-                height={240}
+                height={200}
                 loading={isPending}
-                emptyLabel="No requests recorded in this window"
-                legend={false}
+                emptyLabel="No traffic recorded in this window"
+                legend={metric === "tokens"}
               />
             </div>
           </section>

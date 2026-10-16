@@ -1,4 +1,11 @@
-import { ExternalLink, Info, ShieldCheck, X, Clipboard } from "lucide-react"
+import {
+  ExternalLink,
+  Info,
+  LoaderCircle,
+  ShieldCheck,
+  X,
+  Clipboard,
+} from "lucide-react"
 import { useRef } from "react"
 
 import ActionButton from "@/components/arc/action-button/action-button"
@@ -10,9 +17,10 @@ import useOAuthFlow from "../hooks/useOAuthFlow"
 
 type OAuthPanelProps = {
   flow: ReturnType<typeof useOAuthFlow>
+  providerName?: string
 }
 
-export default function OAuthPanel({ flow }: OAuthPanelProps) {
+export default function OAuthPanel({ flow, providerName }: OAuthPanelProps) {
   const {
     oauthData,
     callbackInput,
@@ -100,6 +108,25 @@ export default function OAuthPanel({ flow }: OAuthPanelProps) {
           </a>
         </div>
       </div>
+
+      {flow.isPolling && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-foreground">
+          <LoaderCircle
+            size={14}
+            className="shrink-0 animate-spin text-primary motion-reduce:animate-none"
+            aria-hidden="true"
+          />
+          <div className="flex-1 leading-relaxed">
+            <span className="font-medium text-foreground">
+              Waiting for approval in browser...
+            </span>
+            <span className="block text-muted-foreground">
+              Once you sign in or click Approve on {providerName ?? "vendor"},
+              this dialog will automatically complete and save.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-surface/60 p-2.5 text-xs leading-relaxed text-muted-foreground">
         <Info

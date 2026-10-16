@@ -149,6 +149,26 @@ async fn login_requires_the_admin_session() {
 }
 
 #[tokio::test]
+async fn poll_errors_never_include_upstream_response_data() {
+    let database = TestDatabase::new().unwrap();
+    let fake = FakeQoderUpstream::start().await;
+    fake.with(|state| {
+        state.poll_status = 500;
+        state.poll_body =
+            r#"{"access_token":"secret-token","errorMessage":"private detail"}"#.to_owned();
+    });
+    let app = app(&database, &fake).await;
+    let login = start_login(&app).await;
+    let state = login["state"].as_str().expect("state").to_owned();
+
+    let response = poll(&app, &state).await;
+    let error = response["error"].as_str().unwrap_or_default();
+    assert!(error.contains("500"));
+    assert!(!error.contains("secret-token"));
+    assert!(!error.contains("private detail"));
+}
+
+#[tokio::test]
 async fn poll_stays_pending_until_the_browser_approves() {
     let database = TestDatabase::new().unwrap();
     let fake = FakeQoderUpstream::start().await;

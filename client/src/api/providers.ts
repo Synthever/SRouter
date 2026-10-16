@@ -163,6 +163,35 @@ export function completeOAuthCallback(
   })
 }
 
+/** Polls a device-flow authorization session (e.g. Qoder, Cline, CodeBuddy). */
+export function pollOAuthSession(providerID: string, state: string) {
+  const normalized = providerID.toLowerCase()
+  let pollBase: string
+  if (normalized === "codebuddy-cn") {
+    pollBase = "/v1/auth/codebuddy-cn/poll"
+  } else if (normalized.includes("cline")) {
+    pollBase = "/v1/auth/cline/poll"
+  } else if (normalized.includes("codebuddy")) {
+    pollBase = "/v1/auth/codebuddy/poll"
+  } else if (normalized.includes("qoder")) {
+    pollBase = "/v1/auth/qoder/poll"
+  } else {
+    return Promise.reject(
+      new Error(
+        `Provider "${providerID}" does not support polling device authorization`
+      )
+    )
+  }
+
+  const pollPath = `${pollBase}?state=${encodeURIComponent(state)}`
+  return request<{
+    status: "pending" | "ok"
+    error?: string | null
+  }>(pollPath, {
+    method: "GET",
+  })
+}
+
 /** `POST /v1/providers/verify`. Probes an unsaved endpoint without storing it. */
 export function verifyCustomProvider(
   body: Pick<AddCustomProviderInput, "protocol" | "base_url" | "api_key">
@@ -185,4 +214,15 @@ export function addCustomProvider(body: {
     method: "POST",
     body,
   })
+}
+
+/** `DELETE /v1/providers/{provider_id}/connections/{connection_id}`. Removes one stored connection of a driver. */
+export function deleteProviderConnection(
+  providerID: string,
+  connectionID: string
+) {
+  return request<{ message: string }>(
+    `/v1/providers/${encodeURIComponent(providerID)}/connections/${encodeURIComponent(connectionID)}`,
+    { method: "DELETE" }
+  )
 }

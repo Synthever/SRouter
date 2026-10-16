@@ -108,7 +108,7 @@ export function ConnectAccountModal({
           </div>
 
           <TabsContent value="oauth" className="space-y-4">
-            <OAuthPanel flow={oauth} />
+            <OAuthPanel flow={oauth} providerName={provider.name} />
           </TabsContent>
 
           <TabsContent value="token" className="space-y-4">
@@ -152,10 +152,10 @@ export function ConnectAccountModal({
         onOpenChange={handleClose}
         title={`Connect ${provider.name}`}
         description={headerDescription}
-        detents={[0.5, 0.92]}
+        detents={[0.85, 0.96]}
         initialDetent={0}
       >
-        <div className="space-y-4 pt-1">
+        <div className="space-y-4 px-1 pt-1 pb-4">
           {content}
           <div className="pt-2">
             <Button

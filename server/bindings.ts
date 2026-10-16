@@ -372,6 +372,13 @@ export type ProviderConnectionView = {
 	base_url: string | null,
 	enabled: boolean,
 	created_at: number,
+	/**
+	 *  The account check verdict: `active` while the stored token has not
+	 *  lapsed, `expired` once it has, `unstated` when the store states no expiry.
+	 */
+	health: "active" | "expired" | "unstated",
+	/**  The connection that holds the same account, when another one does. */
+	duplicate_of?: string | null,
 };
 
 /**

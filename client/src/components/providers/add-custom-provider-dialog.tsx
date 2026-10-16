@@ -238,74 +238,81 @@ export function AddCustomProviderDialog({
       onSubmit={preventSubmit}
       className="flex flex-col gap-4"
     >
-      <FloatingField
-        id="custom-provider-name"
-        label="Provider name"
-        requiredMark
-        autoComplete="off"
-        value={form.name}
-        onChange={(event) => updateForm({ name: event.currentTarget.value })}
-        placeholder="Acme AI"
-        aria-invalid={addAttempted && form.name.trim().length === 0}
-        required
-      />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <FloatingField
+          id="custom-provider-name"
+          label="Provider name"
+          requiredMark
+          autoComplete="off"
+          value={form.name}
+          onChange={(event) => updateForm({ name: event.currentTarget.value })}
+          placeholder="Acme AI"
+          aria-invalid={addAttempted && form.name.trim().length === 0}
+          required
+        />
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium">Protocol</legend>
+        <FloatingField
+          id="custom-provider-prefix"
+          label="Model prefix (optional)"
+          autoComplete="off"
+          monospace
+          value={form.prefix}
+          onChange={(event) =>
+            updateForm({ prefix: event.currentTarget.value })
+          }
+          placeholder="acme"
+        />
+      </div>
+
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-xs font-medium text-foreground">
+          Protocol
+        </legend>
         <RadioCards
           aria-label="Protocol"
           name="custom-provider-protocol"
           layout="grid"
+          minColumnWidth={220}
           value={form.protocol}
           onValueChange={handleProtocolChange}
           options={PROTOCOLS}
         />
       </fieldset>
 
-      <FloatingField
-        ref={baseURLRef}
-        id="custom-provider-url"
-        label="Base URL"
-        requiredMark
-        type="url"
-        autoComplete="url"
-        monospace
-        value={form.base_url}
-        onChange={(event) =>
-          updateForm({ base_url: event.currentTarget.value })
-        }
-        placeholder="https://api.example.com/v1"
-        required
-      />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <FloatingField
+          ref={baseURLRef}
+          id="custom-provider-url"
+          label="Base URL"
+          requiredMark
+          type="url"
+          autoComplete="url"
+          monospace
+          value={form.base_url}
+          onChange={(event) =>
+            updateForm({ base_url: event.currentTarget.value })
+          }
+          placeholder="https://api.example.com/v1"
+          required
+        />
 
-      <FloatingField
-        id="custom-provider-prefix"
-        label="Model prefix (optional)"
-        description="Routes only model ids that start with this prefix to this provider."
-        autoComplete="off"
-        monospace
-        value={form.prefix}
-        onChange={(event) => updateForm({ prefix: event.currentTarget.value })}
-        placeholder="acme"
-      />
-
-      <FloatingField
-        ref={apiKeyRef}
-        id="custom-provider-api-key"
-        label="API key"
-        description="Sent as the bearer credential on every request to this provider."
-        requiredMark
-        type="password"
-        canTogglePassword
-        monospace
-        autoComplete="new-password"
-        value={form.api_key}
-        onChange={(event) =>
-          updateForm({ api_key: event.currentTarget.value })
-        }
-        placeholder="sk-..."
-        required
-      />
+        <FloatingField
+          ref={apiKeyRef}
+          id="custom-provider-api-key"
+          label="API key"
+          requiredMark
+          type="password"
+          canTogglePassword
+          monospace
+          autoComplete="new-password"
+          value={form.api_key}
+          onChange={(event) =>
+            updateForm({ api_key: event.currentTarget.value })
+          }
+          placeholder="sk-..."
+          required
+        />
+      </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <ActionButton
@@ -398,10 +405,10 @@ export function AddCustomProviderDialog({
         onOpenChange={handleOpenChange}
         title={title}
         description={description}
-        detents={[0.5, 0.92]}
+        detents={[0.85, 0.96]}
         initialDetent={0}
       >
-        <div className="space-y-4 pt-1">{formContent}</div>
+        <div className="space-y-4 px-1 pt-1 pb-6">{formContent}</div>
       </BottomSheet>
     )
   }
@@ -411,7 +418,7 @@ export function AddCustomProviderDialog({
       <DialogContent
         title={title}
         description={description}
-        className="sm:max-w-lg"
+        className="!max-h-[92vh] sm:max-w-2xl"
       >
         {formContent}
       </DialogContent>

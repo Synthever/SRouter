@@ -12,15 +12,17 @@ use std::collections::HashSet;
 
 use axum::body::Bytes;
 use axum::extract::{Path, State};
-use axum::routing::{get, patch};
+use axum::routing::{delete, get, patch};
 use axum::{Json, Router};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::clock::now_ms;
 use crate::constants;
 use crate::error::APIError;
 use crate::features::catalog::merge_custom_models;
-use crate::features::providers::custom::refresh_custom_provider;
+use crate::features::providers::custom::{refresh_custom_provider, unregister_custom_provider};
+use crate::features::providers::management::account_check::check_accounts;
 use crate::features::providers::management::model::{
     CatalogResponse, GroupedCatalog, ProviderConnectionView, ProviderEntry, ProviderModel,
 };
@@ -30,8 +32,9 @@ use crate::infrastructure::database::AppDatabase;
 use crate::infrastructure::database::catalog_flags::{favorite_model_ids, hidden_model_ids};
 use crate::infrastructure::database::providers::{
     CustomProviderRow, NewCustomProvider, ProviderConnection, ProviderPatch, apply_provider_patch,
-    create_custom_provider, find_custom_provider, list_connections, list_custom_providers,
-    load_custom_credentials, matches_base_id, provider_enabled,
+    create_custom_provider, delete_connection, find_connection, find_custom_provider,
+    list_connections, list_custom_providers, load_connection_accounts, load_custom_credentials,
+    matches_base_id, provider_enabled,
 };
 use crate::infrastructure::database::settings::set_setting;
 use crate::state::AppState;
@@ -53,13 +56,19 @@ pub fn create_providers_read_router() -> Router<AppState> {
 /// matching the Node router, which requires `RequireAdmin` for every write.
 /// The provider `PATCH` carries the provider-level edits: the enabled flag and
 /// the model flags for a built-in driver, or the connection fields for a custom
-/// provider. Every model-level operation lives under `/v1/models`.
+/// provider. Every model-level operation lives under `/v1/models`. The
+/// connection `DELETE` is what clears an account the detail view flagged as a
+/// duplicate.
 pub fn create_providers_management_router() -> Router<AppState> {
     Router::new()
         .route("/providers/{provider_id}", patch(patch_provider))
         .route(
             "/providers/{provider_id}/round-robin",
             patch(patch_round_robin),
+        )
+        .route(
+            "/providers/{provider_id}/connections/{connection_id}",
+            delete(delete_provider_connection),
         )
 }
 
@@ -205,6 +214,41 @@ async fn patch_round_robin(
     .await?;
 
     Ok(Json(detail_entry(&state, &base_id).await?))
+}
+
+/// Removes one stored connection from a driver: the account check flags a
+/// duplicate, and this is how an operator clears it. A custom provider row is
+/// unregistered from the registry too, so the catalog stops advertising it.
+async fn delete_provider_connection(
+    State(state): State<AppState>,
+    Path((provider_id, connection_id)): Path<(String, String)>,
+) -> Result<Json<Value>, APIError> {
+    let database = require_database(&state)?;
+
+    let Some(connection) = find_connection(database, &connection_id).await? else {
+        return Err(connection_not_found(&connection_id));
+    };
+    // The path names the driver, so a connection id belonging to another driver
+    // is a `404` rather than a cross-driver delete.
+    if !connection.base_id_is(base_id_of(&provider_id)) {
+        return Err(connection_not_found(&connection_id));
+    }
+
+    if !delete_connection(database, &connection_id).await? {
+        return Err(connection_not_found(&connection_id));
+    }
+    unregister_custom_provider(&state.providers, &connection_id);
+
+    Ok(Json(serde_json::json!({
+        "message": constants::providers::CONNECTION_DELETED
+    })))
+}
+
+fn connection_not_found(connection_id: &str) -> APIError {
+    APIError::new(
+        404,
+        constants::providers::connection_not_found(connection_id),
+    )
 }
 
 /// Reads `{enabled: bool}`. Only a real boolean is accepted, so `"yes"` and `1`
@@ -470,10 +514,7 @@ async fn detail_entry(state: &AppState, provider_id: &str) -> Result<ProviderEnt
         ProviderTarget::Seed(metadata) => {
             let connections = provider_connections(state, metadata.id).await?;
             let connected_count = connections.iter().filter(|entry| entry.enabled).count();
-            let views = connections
-                .iter()
-                .map(ProviderConnectionView::from)
-                .collect();
+            let views = connection_views(state, &connections).await?;
 
             Ok(ProviderEntry::from_metadata(
                 metadata,
@@ -486,16 +527,35 @@ async fn detail_entry(state: &AppState, provider_id: &str) -> Result<ProviderEnt
         ProviderTarget::Custom(row) => {
             let connections = provider_connections(state, &row.id).await?;
             let connected_count = connections.iter().filter(|entry| entry.enabled).count();
-            let views = connections
-                .iter()
-                .map(ProviderConnectionView::from)
-                .collect();
+            let views = connection_views(state, &connections).await?;
 
             Ok(ProviderEntry::from_custom(&row, connected_count)
                 .with_round_robin(stored_round_robin(state, &row.id).await)
                 .with_details(views, models))
         }
     }
+}
+
+/// Builds the views of one provider's connections, each carrying its account
+/// check: whether another connection already holds the same account, and whether
+/// the stored token has lapsed. Nothing is read back from an upstream.
+async fn connection_views(
+    state: &AppState,
+    connections: &[ProviderConnection],
+) -> Result<Vec<ProviderConnectionView>, APIError> {
+    let accounts = match state.database.as_ref() {
+        Some(database) => load_connection_accounts(database).await?,
+        None => Vec::new(),
+    };
+    let checks = check_accounts(connections, &accounts, now_ms());
+
+    Ok(connections
+        .iter()
+        .zip(checks)
+        .map(|(connection, check)| {
+            ProviderConnectionView::from(connection).with_account_check(&check)
+        })
+        .collect())
 }
 
 /// The stored rotation flag for one provider, read through the same helper the
