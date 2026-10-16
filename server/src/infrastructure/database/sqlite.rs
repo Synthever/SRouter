@@ -38,8 +38,11 @@ impl SqliteHandle {
             .busy_timeout(Duration::from_millis(5000))
             .foreign_keys(true);
 
+        // Raise max_connections from 5 to 30 to match WAL concurrent readers.
+        // WAL mode permits multiple concurrent readers without blocking, while writes
+        // serialize safely under SQLite's internal lock and the 5s busy timeout.
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
+            .max_connections(30)
             .connect_with(options)
             .await?;
 

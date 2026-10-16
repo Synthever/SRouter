@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 use crate::config::APIConfig;
 use crate::error::APIError;
@@ -93,6 +94,7 @@ pub struct AppState {
     pub database: Option<AppDatabase>,
     pub search: Arc<SearchService>,
     pub quota_cache: Arc<QuotaCache>,
+    pub upstream_semaphore: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -117,6 +119,7 @@ impl AppState {
         providers: ProviderRegistry,
         security: SecurityState,
     ) -> Self {
+        let upstream_concurrency = config.upstream_concurrency.max(1);
         Self {
             config: Arc::new(config),
             providers: Arc::new(providers),
@@ -124,6 +127,7 @@ impl AppState {
             database: None,
             search: Arc::new(SearchService::new()),
             quota_cache: Arc::new(QuotaCache::new()),
+            upstream_semaphore: Arc::new(Semaphore::new(upstream_concurrency)),
         }
     }
 

@@ -181,6 +181,43 @@ async fn credit_adds_to_an_existing_key_and_rejects_bad_amounts() {
 }
 
 #[tokio::test]
+async fn auth_cache_invalidates_immediately_on_key_modification() {
+    let database = TestDatabase::new().unwrap();
+    let security = sqlx_security_state(&database, vec![hash_session_token(SESSION_TOKEN)]).await;
+    let app = create_router(empty_registry_state(security.clone()));
+    let (_, created) = create_key(&app, serde_json::json!({ "name": "Cache Test Key" })).await;
+    let id = created["id"].as_str().unwrap();
+    let secret = created["key"].as_str().unwrap();
+
+    // Authenticate once to populate the cache
+    let record1 = security
+        .api_keys
+        .find_by_key(secret)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(record1.enabled);
+
+    // Disable the key via admin patch route
+    let patch_body = serde_json::json!({ "enabled": false });
+    let response = app
+        .clone()
+        .oneshot(admin_request("PATCH", &format!("{KEYS}/{id}"), patch_body))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // The auth cache must be invalidated and reflect disabled immediately
+    let record2 = security
+        .api_keys
+        .find_by_key(secret)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!record2.enabled);
+}
+
+#[tokio::test]
 async fn delete_revokes_a_key_and_then_reports_it_missing() {
     let database = TestDatabase::new().unwrap();
     let app = admin_app(&database).await;

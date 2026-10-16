@@ -3,6 +3,9 @@
 //! PostgreSQL path has no schema-version carrier yet (tradeoff F), so these
 //! stores report that explicitly instead of guessing.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use futures_util::future::BoxFuture;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
@@ -28,16 +31,33 @@ const KEY_COLUMNS: &str = "id, key_prefix, name, enabled, rate_limit, quota_limi
 #[derive(Clone)]
 pub struct SQLxAPIKeyStore {
     database: AppDatabase,
+    cache: Arc<Mutex<AuthCache>>,
+}
+
+#[derive(Default)]
+struct AuthCache {
+    keys: HashMap<String, Option<APIKeyRecord>>,
+    require_api_key: Option<bool>,
 }
 
 impl SQLxAPIKeyStore {
     pub fn new(database: AppDatabase) -> Self {
-        Self { database }
+        Self {
+            database,
+            cache: Arc::new(Mutex::new(AuthCache::default())),
+        }
     }
 
     fn pool(&self) -> Result<SqlitePool, APIError> {
         self.database
             .sqlite_required(constants::database::API_KEYS_UNSUPPORTED)
+    }
+
+    fn clear_cache(&self) {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.keys.clear();
+            cache.require_api_key = None;
+        }
     }
 }
 
@@ -47,22 +67,40 @@ impl APIKeyStore for SQLxAPIKeyStore {
         key: &'a str,
     ) -> BoxFuture<'a, Result<Option<APIKeyRecord>, APIError>> {
         Box::pin(async move {
+            let key_hash = hash_api_key(key);
+            if let Ok(cache) = self.cache.lock()
+                && let Some(record) = cache.keys.get(&key_hash)
+            {
+                return Ok(record.clone());
+            }
+
             let pool = self.pool()?;
             let row = sqlx::query(
                 "SELECT id, enabled, rate_limit, quota_limit, usage_tokens, credit_limit, \
                  usage_cost, allowed_models FROM api_keys WHERE key_hash = ?",
             )
-            .bind(hash_api_key(key))
+            .bind(&key_hash)
             .fetch_optional(&pool)
             .await
             .map_err(sql_error(constants::database::context::LOOK_UP_API_KEY))?;
 
-            Ok(row.as_ref().map(auth_record_from_row))
+            let record = row.as_ref().map(auth_record_from_row);
+            if let Ok(mut cache) = self.cache.lock() {
+                cache.keys.insert(key_hash, record.clone());
+            }
+
+            Ok(record)
         })
     }
 
     fn require_api_key(&self) -> BoxFuture<'_, Result<bool, APIError>> {
         Box::pin(async move {
+            if let Ok(cache) = self.cache.lock()
+                && let Some(required) = cache.require_api_key
+            {
+                return Ok(required);
+            }
+
             let pool = self.pool()?;
             let value = sqlx::query_scalar::<_, String>(
                 "SELECT value FROM settings WHERE key = 'require_api_key'",
@@ -73,8 +111,17 @@ impl APIKeyStore for SQLxAPIKeyStore {
                 constants::database::context::READ_REQUIRE_API_KEY,
             ))?;
 
-            Ok(matches!(value.as_deref(), Some("true") | Some("1")))
+            let required = matches!(value.as_deref(), Some("true") | Some("1"));
+            if let Ok(mut cache) = self.cache.lock() {
+                cache.require_api_key = Some(required);
+            }
+
+            Ok(required)
         })
+    }
+
+    fn invalidate_cache(&self) {
+        self.clear_cache();
     }
 }
 
@@ -123,6 +170,8 @@ impl APIKeyRepository for SQLxAPIKeyStore {
             .execute(&pool)
             .await
             .map_err(sql_error(constants::database::context::CREATE_API_KEY))?;
+
+            self.clear_cache();
 
             Ok(CreatedAPIKey {
                 key: APIKey {
@@ -202,6 +251,8 @@ impl APIKeyRepository for SQLxAPIKeyStore {
                 .await
                 .map_err(sql_error(constants::database::context::COMMIT_KEY_UPDATE))?;
 
+            self.clear_cache();
+
             Ok(Some(key))
         })
     }
@@ -233,6 +284,8 @@ impl APIKeyRepository for SQLxAPIKeyStore {
                 constants::database::context::COMMIT_CREDIT_UPDATE,
             ))?;
 
+            self.clear_cache();
+
             Ok(Some(key))
         })
     }
@@ -247,6 +300,8 @@ impl APIKeyRepository for SQLxAPIKeyStore {
                 .execute(&pool)
                 .await
                 .map_err(sql_error(constants::database::context::DELETE_API_KEY))?;
+
+            self.clear_cache();
 
             Ok(result.rows_affected() > 0)
         })

@@ -69,6 +69,20 @@ pub async fn create_completion(
     // Strip noisy tool output and apply the terse directive once per top-level request.
     apply_to_request(&mut chat_request);
 
+    let _permit = state
+        .upstream_semaphore
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            APIError::new(
+                429,
+                constants::middleware::rate_limit_exceeded(
+                    state.config.upstream_concurrency as u32,
+                ),
+            )
+            .with_code(constants::ErrorCode::RateLimitExceeded)
+        })?;
+
     if chat_request.stream {
         // Streamed requests log every outcome inside the spawned loop, so the
         // reservation is always settled or released there.

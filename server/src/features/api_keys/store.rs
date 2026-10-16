@@ -16,6 +16,9 @@ pub trait APIKeyStore: Send + Sync {
     /// Reads the `require_api_key` setting. Missing rows mean `false`, matching
     /// a fresh install.
     fn require_api_key(&self) -> BoxFuture<'_, Result<bool, APIError>>;
+
+    /// Invalidates cached key records and settings when credentials change.
+    fn invalidate_cache(&self) {}
 }
 
 /// Stand-in for a database with no key rows and no settings: a fresh install.

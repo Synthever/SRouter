@@ -62,6 +62,7 @@ async fn update_settings(
 
     if let Some(required) = input.require_api_key {
         set_require_api_key(database, required).await?;
+        state.security.api_keys.invalidate_cache();
     }
     for (key, value) in &input.settings {
         set_setting(database, key, value).await?;

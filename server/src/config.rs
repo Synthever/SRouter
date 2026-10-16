@@ -23,6 +23,9 @@ pub struct APIConfig {
     pub web_dist_path: Option<PathBuf>,
     pub database_path: PathBuf,
     pub database_url: Option<String>,
+    /// Maximum concurrent requests dispatched to upstream providers.
+    /// Saturation rejects with HTTP 429 Retry-After: 1.
+    pub upstream_concurrency: usize,
     /// `<HOME>/.srouter`, the SRouter data directory. The database importer
     /// keeps its transfer temp dirs and backups here (`databaseTransfer.ts:325-328`),
     /// which is `$HOME/.srouter` even when `DATABASE_PATH` points elsewhere.
@@ -94,6 +97,10 @@ impl APIConfig {
             Some(_) => true,
             None => !is_production,
         };
+        let upstream_concurrency = environment
+            .get("SROUTER_UPSTREAM_CONCURRENCY")
+            .and_then(|val| val.trim().parse::<usize>().ok())
+            .unwrap_or(100);
 
         Ok(Self {
             port,
@@ -123,6 +130,7 @@ impl APIConfig {
                 .get("DATABASE_URL")
                 .filter(|url| !url.is_empty())
                 .cloned(),
+            upstream_concurrency,
             srouter_dir,
         })
     }

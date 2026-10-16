@@ -1340,6 +1340,37 @@ async fn a_request_that_cannot_reserve_its_budget_is_rejected_before_the_upstrea
 }
 
 #[tokio::test]
+async fn upstream_concurrency_semaphore_rejects_with_429_when_saturated() {
+    let (_fake, state) = app_state_with_fake_upstream().await;
+    let held_permit = state
+        .upstream_semaphore
+        .clone()
+        .try_acquire_owned()
+        .unwrap();
+
+    // Drain all remaining permits if any
+    let mut more_permits = Vec::new();
+    while let Ok(permit) = state.upstream_semaphore.clone().try_acquire_owned() {
+        more_permits.push(permit);
+    }
+
+    let app = srouter_server::app::create_router(state);
+    let body = serde_json::json!({
+        "model": "opencode_zen/space-bunny-free",
+        "messages": [{ "role": "user", "content": "hello" }]
+    });
+
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    drop(held_permit);
+    drop(more_permits);
+}
+
+#[tokio::test]
 async fn a_completed_request_settles_the_reservation_to_the_real_tokens() {
     let (_upstream, repository, app) = keyed_app(true).await;
     let body = serde_json::json!({
