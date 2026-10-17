@@ -1,0 +1,176 @@
+name: docker-publish
+
+on:
+  # Manual only: no `push`, `pull_request`, or tag trigger, so this workflow
+  # never fires on its own. Run it from the Actions UI (or `gh workflow run`)
+  # when releasing an image.
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Lowercase literal, not `${{ github.repository }}`: that expression renders
+  # `seaavey/SRouter` and a registry rejects an uppercase repository name.
+  IMAGE_NAME: seaavey/srouter
+
+# A new dispatch on the same ref replaces any in-flight build for that ref.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Each architecture builds on a matching native runner. No QEMU emulation:
+  # the Rust release build and the bun build run at native speed on both
+  # platforms.
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    # Hard ceiling so a wedged build fails loudly instead of hanging for
+    # hours; a cold Rust release build plus the base-image pulls is the
+    # slow case.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # The build reads the context from the working tree; producing
+          # the image needs no push access to the repository.
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          # Push an untagged per-arch image; the merge job creates the
+          # tags. `push-by-digest=true` pushes without a name, so neither
+          # `push: true` nor `tags:` belongs here — `push=true` inside
+          # `outputs` is what sends it to the registry.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          # Scope the cache per arch so amd64 layers never poison arm64.
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      - name: Export image digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        # build-push-action outputs the digest as a string ("sha256:...");
+        # write it to a file first — upload-artifact takes paths, not
+        # values. An empty digest would still produce a file, so fail
+        # before that reaches the merge job.
+        run: |
+          test -n "$DIGEST"
+          echo "$DIGEST" > "digest-${{ matrix.arch }}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digest-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 1
+
+  # Combine the per-arch digests into one multi-arch manifest list and tag it.
+  merge:
+    name: Merge & Tag Manifest
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download image digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Dispatching from `main` tags the manifest `main` + `latest`;
+      # dispatching from a `v*` tag yields the semver tags below.
+      - name: Extract Docker metadata (tags, annotations)
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # The annotations output carries one "<level>:<key>=<value>"
+          # line per label; `imagetools create` below takes only `index:`
+          # and `manifest-descriptor:` prefixes, and it is the index that
+          # needs the org.opencontainers.image.* values.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Create and push multi-arch manifest
+        working-directory: /tmp/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
+        run: |
+          # metadata-action emits newline-delimited entries in both
+          # outputs. Build bash arrays so a value containing spaces (the
+          # repository description inside
+          # org.opencontainers.image.description) stays one argument —
+          # unquoted word splitting made buildx parse "Local-first" from
+          # the description as another image source.
+          ARGS=()
+          while IFS= read -r tag; do
+            ARGS+=( -t "$tag" )
+          done <<< "$TAGS"
+          while IFS= read -r annotation; do
+            ARGS+=( --annotation "$annotation" )
+          done <<< "$ANNOTATIONS"
+          for digest_file in digest-*; do
+            ARGS+=( "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@$(cat "$digest_file")" )
+          done
+          docker buildx imagetools create "${ARGS[@]}"
+
+      - name: Inspect final manifest
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          # Inspect the first tag metadata-action actually created.
+          # github.ref_name is not a valid image tag on branch refs
+          # (contains "/") and does not match semver tags on releases.
+          FIRST_TAG=$(echo "$TAGS" | head -n 1)
+          docker buildx imagetools inspect "$FIRST_TAG"
