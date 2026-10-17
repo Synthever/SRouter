@@ -48,9 +48,11 @@ async fn json(response: Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).expect("json body")
 }
 
-/// A public URL the create path accepts; `example.com` is never contacted by the
-/// create route, only by the verify route.
-const PUBLIC_BASE_URL: &str = "https://api.example.com/v1";
+/// A public URL the create path accepts. A literal address rather than a
+/// hostname, so the SSRF guard checks it without touching the machine's
+/// resolver; nothing here is ever contacted — the create route stores the row
+/// and rebuilds the adapter, it does not probe.
+const PUBLIC_BASE_URL: &str = "https://8.8.8.8/v1";
 
 #[tokio::test]
 async fn verify_rejects_private_endpoints_before_probing() {

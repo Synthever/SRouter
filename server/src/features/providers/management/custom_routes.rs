@@ -424,7 +424,7 @@ async fn assert_public_url(base_url: &str) -> Result<(), APIError> {
         ));
     };
     let port = parsed.port_or_known_default().unwrap_or(443);
-    if ssrf::is_blocked_host(host, port) {
+    if ssrf::is_blocked_host(host, port).await {
         return Err(APIError::new(
             400,
             "Base URL must be a valid public HTTP or HTTPS URL",

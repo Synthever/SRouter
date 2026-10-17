@@ -1,7 +1,11 @@
 //! Address guards for upstream URLs derived from user input. Built-in providers
 //! use fixed, trusted base URLs; only user-supplied targets pass through here.
 
-use std::net::{IpAddr, Ipv6Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv6Addr};
+use std::time::Duration;
+
+use tokio::net::lookup_host;
+use tokio::time::timeout;
 
 /// Returns `true` for addresses a user-supplied upstream URL must never reach:
 /// loopback, private, link-local, unique-local, unspecified, and similar.
@@ -25,18 +29,32 @@ pub fn is_blocked_address(address: IpAddr) -> bool {
     }
 }
 
+/// How long a hostname may take to resolve before the guard refuses it.
+pub const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
+
 /// Resolves `host` and reports whether any resolved address is blocked. A host
 /// that is already a literal IP is checked without DNS.
-pub fn is_blocked_host(host: &str, port: u16) -> bool {
+///
+/// Resolution runs off the async worker and under [`DNS_LOOKUP_TIMEOUT`], so a
+/// hung resolver cannot stall the request that asked. A failure, an empty
+/// answer, and a timeout all count as blocked: this guard is the only thing
+/// keeping a user-supplied URL off the private network, so a host it cannot
+/// clear must be refused rather than let through.
+pub async fn is_blocked_host(host: &str, port: u16) -> bool {
     if let Ok(address) = host.parse::<IpAddr>() {
         return is_blocked_address(address);
     }
 
-    match (host, port).to_socket_addrs() {
-        Ok(addresses) => addresses
-            .map(|address| address.ip())
-            .any(is_blocked_address),
-        Err(_) => false,
+    match timeout(DNS_LOOKUP_TIMEOUT, lookup_host((host, port))).await {
+        Ok(Ok(addresses)) => {
+            let resolved: Vec<_> = addresses.collect();
+
+            resolved.is_empty()
+                || resolved
+                    .iter()
+                    .any(|address| is_blocked_address(address.ip()))
+        }
+        Ok(Err(_)) | Err(_) => true,
     }
 }
 
@@ -88,10 +106,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn literal_ip_hosts_are_checked_without_dns() {
-        assert!(is_blocked_host("127.0.0.1", 443));
-        assert!(is_blocked_host("169.254.169.254", 80));
-        assert!(!is_blocked_host("1.1.1.1", 443));
+    #[tokio::test]
+    async fn literal_ip_hosts_are_checked_without_dns() {
+        assert!(is_blocked_host("127.0.0.1", 443).await);
+        assert!(is_blocked_host("169.254.169.254", 80).await);
+        assert!(!is_blocked_host("1.1.1.1", 443).await);
+    }
+
+    /// A host the resolver cannot clear is refused rather than allowed: a
+    /// failed or overrun lookup used to read as "public".
+    #[tokio::test]
+    async fn an_unresolvable_host_is_blocked() {
+        assert!(is_blocked_host("does-not-resolve.invalid", 443).await);
     }
 }
