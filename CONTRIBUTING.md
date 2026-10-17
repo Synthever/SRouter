@@ -57,7 +57,7 @@ The contract lives in the Rust types. Response types carry the serde attributes 
 
 Follow Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `perf:`, `chore:`) and keep the subject imperative. Say what you ran in the pull request description.
 
-Run the full suite before pushing. This repository has no CI workflow at the moment, so nothing runs it for you.
+Run the full suite before pushing. CI (`.github/workflows/ci.yml`) re-runs `fmt`, `clippy`, and the suite on pushes to `main` and pull requests into it, but the run before you push is still yours to make.
 
 A change that needs a dashboard, a CLI, or a documentation site should say where that piece is meant to live. Those parts of the project, along with the seven `packages/*` workspace packages, were removed in October 2026. The old code is still readable at the git branches `backup/pre-packages-removal` and `backup/pre-apps-api-removal`.
 

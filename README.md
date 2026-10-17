@@ -147,7 +147,7 @@ cargo fmt --manifest-path server/Cargo.toml -- --check
 cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
 ```
 
-The server is one crate, no workspace and no DI container. `server/tests/` holds the integration suites, and each one builds its own temporary SQLite database and fake upstreams, so tests never touch your real data or reach a real provider. CI (`.github/workflows/ci.yml`) re-runs the suite, `fmt`, `clippy`, and the client's lint/typecheck/build on pushes to `main` and pull requests into it, but run the suite yourself before you push.
+The server is one crate, no workspace and no DI container. `server/tests/` holds the integration suites, and each one builds its own temporary SQLite database and fake upstreams, so tests never touch your real data or reach a real provider. CI (`.github/workflows/ci.yml`) re-runs the suite, `fmt`, and `clippy` on pushes to `main` and pull requests into it, but run the suite yourself before you push.
 
 Wire types are shared with the client through generated TypeScript. After touching a Rust type:
 

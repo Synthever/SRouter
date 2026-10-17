@@ -147,7 +147,7 @@ cargo fmt --manifest-path server/Cargo.toml -- --check
 cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
 ```
 
-Server-nya satu crate, tanpa workspace dan tanpa DI container. `server/tests/` memuat suite integrasi, dan setiap suite membuat database SQLite sementara sendiri plus upstream palsu, jadi test tidak pernah menyentuh data aslimu atau menghubungi provider sungguhan. CI (`.github/workflows/ci.yml`) mengulang suite-nya plus `fmt`/`clippy` dan lint, typecheck, serta build client pada push ke `main` dan pull request ke sana, tapi tetap jalankan suite-nya sendiri sebelum push.
+Server-nya satu crate, tanpa workspace dan tanpa DI container. `server/tests/` memuat suite integrasi, dan setiap suite membuat database SQLite sementara sendiri plus upstream palsu, jadi test tidak pernah menyentuh data aslimu atau menghubungi provider sungguhan. CI (`.github/workflows/ci.yml`) mengulang suite-nya plus `fmt`/`clippy` pada push ke `main` dan pull request ke sana, tapi tetap jalankan suite-nya sendiri sebelum push.
 
 Tipe wire dibagi ke client lewat TypeScript yang di-generate. Setelah mengubah tipe Rust:
 
