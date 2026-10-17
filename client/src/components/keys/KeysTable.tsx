@@ -11,9 +11,9 @@ import {
   type DataColumn,
   SortableDataTable,
 } from "@/components/arc/sortable-data-table/sortable-data-table"
+import { Switch } from "@/components/arc/switch/switch"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { MONEY, NUMBER, percent } from "@/components/usage/types"
-import { Switch } from "@/components/ui/switch"
 
 type KeysTableProps = {
   keys: APIKeyResponse[]
@@ -116,6 +116,7 @@ export function KeysTable({ keys, onEditKey, onAddCredit }: KeysTableProps) {
             onCheckedChange={(enabled) =>
               toggle.mutate({ keyID: row.id, enabled })
             }
+            disabled={toggle.isPending}
             aria-label={`${row.enabled ? "Disable" : "Enable"} ${row.name}`}
           />
           <span className="text-xs text-muted-foreground">

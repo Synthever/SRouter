@@ -26,6 +26,7 @@ import { CopyButton } from "@/components/arc/copy-button/copy-button"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
 import HoldToConfirm from "@/components/arc/hold-to-confirm/hold-to-confirm"
 import { SearchField } from "@/components/arc/search-field/search-field"
+import { Switch } from "@/components/arc/switch/switch"
 import {
   Tabs,
   TabsContent,
@@ -36,7 +37,6 @@ import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { ConnectAccountModal } from "@/components/providers/modals/ConnectAccounts"
 import { ProviderLogo } from "@/components/providers/provider-logo"
-import { Switch } from "@/components/ui/switch"
 
 export const Route = createFileRoute("/_authenticated/providers/$providerId")({
   component: ProviderDetailPage,

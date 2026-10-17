@@ -1,5 +1,5 @@
 import { FloatingField } from "@/components/arc/floating-field/floating-field"
-import { Switch } from "@/components/ui/switch"
+import { Switch } from "@/components/arc/switch/switch"
 
 import type {
   APIKeyResponse,
@@ -71,7 +71,8 @@ export function createInputFromForm(values: KeyFormValues): CreateAPIKeyInput {
     rate_limit: limitValue(values.rate_limit),
     quota_limit: limitValue(values.quota_limit),
     credit_limit: limitValue(values.credit_limit, true),
-    allowed_models: values.allowed_models.length > 0 ? values.allowed_models : null,
+    allowed_models:
+      values.allowed_models.length > 0 ? values.allowed_models : null,
   }
 }
 
