@@ -1,0 +1,22 @@
+services:
+  srouter:
+    build: .
+    image: srouter:latest
+    restart: unless-stopped
+    ports:
+      - "${SROUTER_PORT:-3000}:3000"
+    environment:
+      # config.rs derives srouter_dir from HOME, not from DATABASE_PATH, so the
+      # importer's temp dirs and backups stay on the same volume as the database.
+      HOME: /data
+      DATABASE_PATH: /data/srouter.db
+      WEB_DIST_PATH: /web
+      # Both are filtered when empty. An https:// URL here also turns secure
+      # cookies on, and while a password is set it is reset on every boot.
+      SROUTER_PUBLIC_URL: ${SROUTER_PUBLIC_URL:-}
+      SROUTER_ADMIN_PASSWORD: ${SROUTER_ADMIN_PASSWORD:-}
+    volumes:
+      - srouter-data:/data
+
+volumes:
+  srouter-data:
