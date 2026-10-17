@@ -209,16 +209,18 @@ pub struct CostBreakdown {
 /// Suffixes a driver appends to a model id models.dev does not carry: an effort
 /// tier (`gemini-3.8-flash-high` serves `gemini-3.8-flash`), a reasoning variant
 /// (`claude-opus-4-6-thinking` serves `claude-opus-4-6`), or the free tier of a
-/// paid model (`step-5-preview-free` serves `step-5-preview`). Pricing is keyed
-/// by the catalog id, so the suffix has to come off before the lookup.
+/// paid model (`step-5-preview-free` serves `step-5-preview`). Both the price and
+/// the context window are keyed by the catalog id, so the suffix has to come off
+/// before either lookup.
 const VARIANT_SUFFIXES: &[&str] = &["-high", "-medium", "-low", "-thinking", "-free"];
 
-/// The catalog rate for a model id, trying the id as sent, its bare form without
+/// The catalog row for a model id, trying the id as sent, its bare form without
 /// the provider prefix (`openai/gpt-4o` -> `gpt-4o`), then each of those with a
 /// [`VARIANT_SUFFIXES`] suffix removed. An exact catalog entry always wins, so a
-/// model that is only sold in a variant (`deepseek-v3.2-thinking`, `space-bunny-free`)
-/// keeps its own rate instead of borrowing its base's.
-fn lookup_cost(model_id: &str) -> Option<ModelPricingCost> {
+/// model that is only sold in a variant (`deepseek-v3.2-thinking`,
+/// `space-bunny-free`) keeps its own row instead of borrowing its base's —
+/// `mimo-v2.6-flash-free` holds 200k while its paid base holds 1M.
+fn find_catalog_row<T: Copy>(model_id: &str, rows: &HashMap<String, T>) -> Option<T> {
     let normalized = model_id.trim().to_lowercase();
     let bare = normalized.split_once('/').map(|(_, rest)| rest);
 
@@ -226,12 +228,17 @@ fn lookup_cost(model_id: &str) -> Option<ModelPricingCost> {
         .into_iter()
         .flatten()
         .find_map(|key| {
-            CATALOG.cost_map.get(key).copied().or_else(|| {
+            rows.get(key).copied().or_else(|| {
                 VARIANT_SUFFIXES
                     .iter()
-                    .find_map(|suffix| CATALOG.cost_map.get(key.strip_suffix(suffix)?).copied())
+                    .find_map(|suffix| rows.get(key.strip_suffix(suffix)?).copied())
             })
         })
+}
+
+/// The catalog rate for a model id. See [`find_catalog_row`] for the precedence.
+fn lookup_cost(model_id: &str) -> Option<ModelPricingCost> {
+    find_catalog_row(model_id, &CATALOG.cost_map)
 }
 
 /// Estimates detailed token cost breakdown in USD for a model and usage breakdown.
@@ -280,15 +287,8 @@ pub fn estimate_cost(model_id: &str, usage: &UsageBreakdown) -> Option<f64> {
 /// or `<provider>/<id>`. `None` when the snapshot does not cover the model, so a
 /// caller must decide its own fallback rather than treat silence as unlimited.
 pub fn context_limit(model_id: &str) -> Option<usize> {
-    let normalized = model_id.trim().to_lowercase();
-    let bare = normalized
-        .split_once('/')
-        .map_or(normalized.as_str(), |(_, rest)| rest);
-
-    CATALOG
-        .context_map
-        .get(bare)
-        .and_then(|context| usize::try_from(*context).ok())
+    find_catalog_row(model_id, &CATALOG.context_map)
+        .and_then(|context| usize::try_from(context).ok())
 }
 
 #[cfg(test)]
@@ -424,5 +424,48 @@ mod tests {
 
         assert_eq!(estimate_cost("no-such-model-high", &usage), None);
         assert_eq!(estimate_cost("no-such-model-free", &usage), None);
+    }
+
+    /// The context guard reads the same snapshot as the price, so an id the
+    /// catalog only carries under its base used to fall through to the caller's
+    /// 300k fallback and refuse a request the upstream would have accepted.
+    #[test]
+    fn a_driver_variant_resolves_the_window_of_the_model_it_serves() {
+        for (variant, base) in [
+            ("deepseek-v4.1-flash-free", "deepseek-v4.1-flash"),
+            ("glm-5.3-flash-free", "glm-5.3-flash"),
+            ("gemini-3.8-flash-high", "gemini-3.8-flash"),
+            ("claude-opus-4-6-thinking", "claude-opus-4-6"),
+        ] {
+            assert!(context_limit(variant).is_some(), "{variant} must resolve");
+            assert_eq!(
+                context_limit(variant),
+                context_limit(base),
+                "{variant} vs {base}"
+            );
+        }
+    }
+
+    /// A variant the catalog carries in its own right keeps its own window: the
+    /// free tier of `mimo-v2.6-flash` holds 200k, its paid base 1M, so reading
+    /// the base would admit five times the traffic the free tier serves.
+    #[test]
+    fn an_exact_catalog_row_outranks_its_stripped_base_for_the_window() {
+        assert_eq!(context_limit("mimo-v2.6-flash-free"), Some(200_000));
+        assert_eq!(context_limit("mimo-v2.6-flash"), Some(1_048_576));
+    }
+
+    #[test]
+    fn the_provider_prefix_does_not_change_the_window() {
+        assert_eq!(
+            context_limit("opencode_zen/deepseek-v4.1-flash-free"),
+            context_limit("deepseek-v4.1-flash-free")
+        );
+    }
+
+    #[test]
+    fn an_unknown_model_has_no_window_of_its_own() {
+        assert_eq!(context_limit("no-such-model-high"), None);
+        assert_eq!(context_limit("no-such-model-free"), None);
     }
 }
