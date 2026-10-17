@@ -14,10 +14,11 @@ use crate::constants;
 use crate::error::APIError;
 use crate::features::api_keys::{APIPrincipal, ensure_model_allowed_any};
 use crate::features::gateway::interception::{
-    MAX_INTERCEPT_DEPTH, StreamTurn, body_error_to_api_error, log_request, observe_usage,
+    LogError, MAX_INTERCEPT_DEPTH, StreamTurn, body_error_to_api_error, log_request, observe_usage,
     read_json_body, run_buffered_interception, stream_error_payload, stream_log_status,
     try_intercept, unresolved_provider_id,
 };
+use crate::features::gateway::limits::ensure_within_context_limit;
 use crate::features::gateway::token_saver::apply_to_request;
 use crate::features::gateway::{ReceiverStream, RequestLogContext};
 use crate::protocol::model::{ChatCompletionRequest, ChatRole, parse_chat_completion_request};
@@ -150,60 +151,6 @@ fn unregistered_model(model: &str) -> APIError {
     APIError::new(404, constants::gateway::model_not_registered(model))
 }
 
-const OPENCODE_ZEN_MAX_CONTEXT: usize = 300_000;
-
-fn ensure_within_context_limit(request: &ChatCompletionRequest) -> Result<(), APIError> {
-    let model = request.model.to_lowercase();
-    let is_opencode_zen = model.starts_with("opencode_zen/")
-        || model.starts_with("zen/")
-        || model.starts_with("opencode/");
-
-    if is_opencode_zen {
-        let estimated_prompt = estimate_request_tokens(request);
-        let max_output = request.max_tokens.unwrap_or(0) as usize;
-        let total_requested = estimated_prompt.saturating_add(max_output);
-
-        if total_requested > OPENCODE_ZEN_MAX_CONTEXT {
-            return Err(APIError::new(
-                400,
-                constants::gateway::context_length_exceeded(
-                    OPENCODE_ZEN_MAX_CONTEXT,
-                    total_requested,
-                ),
-            )
-            .with_code(constants::ErrorCode::ContextLengthExceeded)
-            .with_param("messages"));
-        }
-    }
-
-    Ok(())
-}
-
-fn estimate_request_tokens(request: &ChatCompletionRequest) -> usize {
-    use crate::protocol::model::ChatContent;
-
-    let mut tokens = 0;
-    for message in &request.messages {
-        tokens += 4;
-        match &message.content {
-            ChatContent::Text(text) => {
-                tokens += text.chars().count().div_ceil(4);
-            }
-            ChatContent::Parts(parts) => {
-                for part in parts {
-                    if let Some(text) = &part.text {
-                        tokens += text.chars().count().div_ceil(4);
-                    } else if part.image_url.is_some() {
-                        tokens += 1600;
-                    }
-                }
-            }
-            ChatContent::Null => {}
-        }
-    }
-    tokens
-}
-
 /// Runs the streaming completion with server-side tool interception support.
 /// If the model emits tool calls (such as search) that the client did not define,
 /// the gateway buffers the stream, performs the search in parallel, and opens
@@ -237,7 +184,7 @@ async fn run_streaming_interception_loop(
                             None,
                             404,
                             &UsageBreakdown::default(),
-                            Some(error.message()),
+                            Some(&LogError::Gateway(&error)),
                         )
                         .await;
                         return;
@@ -262,7 +209,7 @@ async fn run_streaming_interception_loop(
                     Some(&resolved.model),
                     stream_log_status(error.message(), error.status()),
                     &UsageBreakdown::default(),
-                    Some(error.message()),
+                    Some(&LogError::Gateway(&error)),
                 )
                 .await;
                 return;
@@ -273,7 +220,7 @@ async fn run_streaming_interception_loop(
         let mut decoder = sse::SseDataDecoder::new();
         let mut turn = StreamTurn::default();
         let mut streamed_directly = false;
-        let mut stream_failure: Option<(u16, String)> = None;
+        let mut stream_failure: Option<(u16, String, Option<String>)> = None;
         let mut failure_payload: Option<Value> = None;
 
         // The client disconnect races the upstream read: once the response
@@ -370,7 +317,7 @@ async fn run_streaming_interception_loop(
         // `does not bill a stream that errors after partial output`): the log
         // row carries the failure status with zero usage, and `log_request`
         // releases any reservation instead of settling it.
-        if let Some((status, message)) = stream_failure.take() {
+        if let Some((status, message, stream_code)) = stream_failure.take() {
             if !streamed_directly
                 && let Some(json) = failure_payload.take()
                 && let Ok(payload) = serde_json::to_string(&json)
@@ -390,7 +337,10 @@ async fn run_streaming_interception_loop(
                 Some(&resolved.model),
                 status,
                 &UsageBreakdown::default(),
-                Some(&message),
+                Some(&LogError::Stream {
+                    message: &message,
+                    code: stream_code.as_deref(),
+                }),
             )
             .await;
             return;

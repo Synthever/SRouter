@@ -120,6 +120,9 @@ pub struct PricingQuery {
 struct StaticPricingCatalog {
     response: PricingListResponse,
     cost_map: HashMap<String, ModelPricingCost>,
+    /// Context window per bare model id, first entry wins the way `cost_map`
+    /// resolves a duplicate. A model the snapshot does not price has no entry.
+    context_map: HashMap<String, i64>,
 }
 
 static CATALOG: LazyLock<StaticPricingCatalog> = LazyLock::new(|| {
@@ -127,8 +130,13 @@ static CATALOG: LazyLock<StaticPricingCatalog> = LazyLock::new(|| {
         serde_json::from_str(PRICING_JSON).expect("models-dev-pricing.json must be valid JSON");
 
     let mut cost_map = HashMap::with_capacity(items.len() * 2);
+    let mut context_map: HashMap<String, i64> = HashMap::new();
 
     for item in &items {
+        if let Some(context) = item.limit.as_ref().and_then(|limit| limit.context) {
+            context_map.entry(item.id.to_lowercase()).or_insert(context);
+        }
+
         if let Some(cost) = item.cost {
             let model_key = item.id.to_lowercase();
             let provider_key = item.provider.to_lowercase();
@@ -162,7 +170,11 @@ static CATALOG: LazyLock<StaticPricingCatalog> = LazyLock::new(|| {
         data: items,
     };
 
-    StaticPricingCatalog { response, cost_map }
+    StaticPricingCatalog {
+        response,
+        cost_map,
+        context_map,
+    }
 });
 
 /// Handler for `GET /v1/models/pricing`.
@@ -244,6 +256,21 @@ pub fn estimate_cost_breakdown(model_id: &str, usage: &UsageBreakdown) -> Option
 /// Explicit zero rates return `Some(0.0)`.
 pub fn estimate_cost(model_id: &str, usage: &UsageBreakdown) -> Option<f64> {
     estimate_cost_breakdown(model_id, usage).map(|breakdown| breakdown.total)
+}
+
+/// The context window the pricing snapshot records for `model_id`, as a bare id
+/// or `<provider>/<id>`. `None` when the snapshot does not cover the model, so a
+/// caller must decide its own fallback rather than treat silence as unlimited.
+pub fn context_limit(model_id: &str) -> Option<usize> {
+    let normalized = model_id.trim().to_lowercase();
+    let bare = normalized
+        .split_once('/')
+        .map_or(normalized.as_str(), |(_, rest)| rest);
+
+    CATALOG
+        .context_map
+        .get(bare)
+        .and_then(|context| usize::try_from(*context).ok())
 }
 
 #[cfg(test)]

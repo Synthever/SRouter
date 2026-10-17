@@ -1371,15 +1371,16 @@ async fn upstream_concurrency_semaphore_rejects_with_429_when_saturated() {
 }
 
 #[tokio::test]
-async fn opencode_zen_rejects_requests_exceeding_300k_context() {
+async fn opencode_zen_rejects_requests_exceeding_the_model_context_window() {
     let (_fake, state) = app_state_with_fake_upstream().await;
     let app = srouter_server::app::create_router(state);
 
-    // Create a body with max_tokens pushing total over 300_000
+    // `mimo-v2.6-flash-free` holds 200k tokens in the pricing snapshot, so a
+    // 200_005-token budget cannot fit even with an empty prompt.
     let body = serde_json::json!({
-        "model": "opencode_zen/space-bunny-free",
+        "model": "opencode_zen/mimo-v2.6-flash-free",
         "messages": [{ "role": "user", "content": "hello" }],
-        "max_tokens": 300_005
+        "max_tokens": 200_005
     });
 
     let response = app
@@ -1392,6 +1393,104 @@ async fn opencode_zen_rejects_requests_exceeding_300k_context() {
     assert_eq!(json["error"]["type"], "invalid_request_error");
     assert_eq!(json["error"]["code"], "context_length_exceeded");
     assert_eq!(json["error"]["param"], "messages");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("200000"),
+        "the message must quote the model's own window, got {}",
+        json["error"]["message"]
+    );
+}
+
+#[tokio::test]
+async fn a_model_with_a_wider_window_admits_a_request_300k_would_have_refused() {
+    let (_fake, state) = app_state_with_fake_upstream().await;
+    let app = srouter_server::app::create_router(state);
+
+    // `space-bunny-free` holds 1M tokens. A single 300k constant refused this
+    // legitimate request, so the window has to come from the model.
+    let body = serde_json::json!({
+        "model": "opencode_zen/space-bunny-free",
+        "messages": [{ "role": "user", "content": "hello" }],
+        "max_tokens": 300_005
+    });
+
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_context_guard_covers_the_bare_model_id_and_the_messages_route() {
+    let (_fake, state) = app_state_with_fake_upstream().await;
+    let app = srouter_server::app::create_router(state);
+
+    // `/v1/models` advertises bare ids, so a prefix-only check left this spelling
+    // unguarded.
+    let body = serde_json::json!({
+        "model": "mimo-v2.6-flash-free",
+        "messages": [{ "role": "user", "content": "hello" }],
+        "max_tokens": 200_005
+    });
+    let response = app
+        .clone()
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // The Anthropic route reaches the same upstream and needs the same guard.
+    let body = serde_json::json!({
+        "model": "opencode_zen/mimo-v2.6-flash-free",
+        "max_tokens": 200_005,
+        "messages": [{ "role": "user", "content": "hello" }]
+    });
+    let response = app
+        .oneshot(with_loopback_client(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/messages")
+                .version(Version::HTTP_11)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("anthropic-version", "2023-06-01")
+                .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn a_large_tool_schema_counts_towards_the_window() {
+    let (_fake, state) = app_state_with_fake_upstream().await;
+    let app = srouter_server::app::create_router(state);
+
+    // ~800k characters of tool description is ~200k tokens on its own, and the
+    // tool payload travels upstream with the prompt.
+    let body = serde_json::json!({
+        "model": "opencode_zen/mimo-v2.6-flash-free",
+        "messages": [{ "role": "user", "content": "hi" }],
+        "tools": [{
+            "type": "function",
+            "function": {
+                "name": "huge",
+                "description": "x".repeat(800_000),
+                "parameters": { "type": "object", "properties": {} }
+            }
+        }]
+    });
+
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -1514,4 +1613,44 @@ async fn a_client_disconnect_bills_only_the_observed_usage() {
     assert_eq!(record.reservations, vec![("key-1".to_owned(), 4096)]);
     assert_eq!(record.settlements, vec![("key-1".to_owned(), 4096, 14)]);
     assert_eq!(record.increments, vec![("key-1".to_owned(), 0, 0.0)]);
+}
+
+/// A failed request is logged with the message the client received, so an
+/// operator can tell an upstream rejection from a gateway one without the body.
+#[tokio::test]
+async fn a_failed_request_is_logged_with_its_message() {
+    let database = support::TestDatabase::new().unwrap();
+    let (upstream, mut state) = app_state_with_fake_upstream().await;
+    state.database = Some(database.connect().await.unwrap());
+    let app = srouter_server::app::create_router(state);
+
+    // The fake upstream rejects this model with a 401 body.
+    let body = serde_json::json!({
+        "model": "opencode_zen/upstream-fail",
+        "messages": [{ "role": "user", "content": "hello" }]
+    });
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+    assert_ne!(response.status(), StatusCode::OK);
+    assert_eq!(upstream.chat_requests(), 1);
+
+    let database = database.connect().await.unwrap();
+    let logs = srouter_server::infrastructure::database::request_logs::list_request_logs(
+        &database, None, 10, None,
+    )
+    .await
+    .unwrap();
+    let row = logs.data.first().expect("the failed request is logged");
+
+    assert_eq!(row.status_code, 500);
+    assert!(
+        row.error
+            .error_message
+            .as_deref()
+            .is_some_and(|message| message.contains("401")),
+        "the row must carry the rejection the client saw, got {:?}",
+        row.error.error_message
+    );
 }

@@ -11,7 +11,7 @@ use crate::protocol::model::{ChatCompletionRequest, ChatContent, ToolCall};
 use crate::protocol::usage::{UsageBreakdown, normalize_response_usage};
 use crate::state::AppState;
 
-use super::logging::log_request;
+use super::logging::{LogError, log_request};
 use super::turn::{MAX_INTERCEPT_DEPTH, add_usage, assistant_tool_message, attach_search_results};
 
 /// Runs the buffered (non-streaming) completion, intercepting server-side tool
@@ -45,7 +45,7 @@ pub(crate) async fn run_buffered_interception(
                     Some(&resolved.model),
                     error.status(),
                     &accumulated_usage,
-                    Some(error.message()),
+                    Some(&LogError::Gateway(&error)),
                 )
                 .await;
                 return Err(error);

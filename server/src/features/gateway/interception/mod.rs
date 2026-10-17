@@ -18,7 +18,7 @@ mod turn;
 pub(crate) use body::{BodyError, body_error_to_api_error, read_json_body};
 pub(crate) use buffered::run_buffered_interception;
 pub(crate) use logging::{
-    log_request, log_stream_success, stream_log_status, unresolved_provider_id,
+    LogError, log_request, log_stream_success, stream_log_status, unresolved_provider_id,
 };
 pub(crate) use turn::{
     MAX_INTERCEPT_DEPTH, StreamTurn, observe_usage, stream_error_payload, try_intercept,

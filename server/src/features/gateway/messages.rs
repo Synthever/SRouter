@@ -19,10 +19,11 @@ use serde_json::Value;
 use crate::constants;
 use crate::features::api_keys::{APIPrincipal, ensure_model_allowed_any};
 use crate::features::gateway::interception::{
-    BodyError, MAX_INTERCEPT_DEPTH, StreamTurn, log_request, log_stream_success, observe_usage,
-    read_json_body, run_buffered_interception, stream_error_payload, stream_log_status,
-    try_intercept, unresolved_provider_id,
+    BodyError, LogError, MAX_INTERCEPT_DEPTH, StreamTurn, log_request, log_stream_success,
+    observe_usage, read_json_body, run_buffered_interception, stream_error_payload,
+    stream_log_status, try_intercept, unresolved_provider_id,
 };
+use crate::features::gateway::limits::ensure_within_context_limit;
 use crate::features::gateway::token_saver::apply_to_request;
 use crate::features::gateway::translation::{
     AnthropicMessageRequest, AnthropicStreamTranslator, AnthropicThinking, anthropic_error,
@@ -78,6 +79,12 @@ pub async fn create_message(
     let original_model = anthropic_req.model.clone();
     let stream = anthropic_req.stream;
     let mut chat_request = anthropic_to_openai_request(anthropic_req);
+    // The Anthropic route reaches the same upstreams, so it carries the same
+    // window guard; it runs after translation because the estimator reads the
+    // internal message shape.
+    if let Err(error) = ensure_within_context_limit(&chat_request) {
+        return anthropic_error(error.status(), error.message());
+    }
     apply_to_request(&mut chat_request);
 
     if stream {
@@ -223,7 +230,10 @@ async fn run_anthropic_streaming_interception_loop(
                     None,
                     404,
                     &UsageBreakdown::default(),
-                    Some(&message),
+                    Some(&LogError::Stream {
+                        message: &message,
+                        code: None,
+                    }),
                 )
                 .await;
                 return;
@@ -251,7 +261,7 @@ async fn run_anthropic_streaming_interception_loop(
                     Some(&resolved.model),
                     stream_log_status(error.message(), error.status()),
                     &UsageBreakdown::default(),
-                    Some(error.message()),
+                    Some(&LogError::Gateway(&error)),
                 )
                 .await;
                 return;
@@ -263,7 +273,7 @@ async fn run_anthropic_streaming_interception_loop(
         let mut decoder = sse::SseDataDecoder::new();
         let mut turn = StreamTurn::default();
         let mut streamed_directly = false;
-        let mut stream_failure: Option<(u16, String)> = None;
+        let mut stream_failure: Option<(u16, String, Option<String>)> = None;
 
         // The client disconnect races the upstream read: once the response
         // body is dropped, `tx.closed()` wins the select, this function
@@ -297,14 +307,14 @@ async fn run_anthropic_streaming_interception_loop(
                 // after whatever partial output was already streamed (Node's
                 // controller writes the error event and closes the stream);
                 // the frame itself never reaches the translator.
-                if let Some((status, message)) = stream_error_payload(&json) {
+                if let Some((status, message, code)) = stream_error_payload(&json) {
                     let _ = tx
                         .send(Ok(anthropic_error_event_bytes(
                             anthropic_error_type(status),
                             &message,
                         )))
                         .await;
-                    stream_failure = Some((status, message));
+                    stream_failure = Some((status, message, code));
                     break 'read;
                 }
 
@@ -353,7 +363,7 @@ async fn run_anthropic_streaming_interception_loop(
         // row carries the failure status with zero usage, and `log_request`
         // releases any reservation instead of settling it. No `message_stop`
         // follows the error event — Node closes right after it.
-        if let Some((status, message)) = stream_failure.take() {
+        if let Some((status, message, _stream_code)) = stream_failure.take() {
             log_request(
                 &state,
                 &context,
@@ -362,7 +372,10 @@ async fn run_anthropic_streaming_interception_loop(
                 Some(&resolved.model),
                 status,
                 &UsageBreakdown::default(),
-                Some(&message),
+                Some(&LogError::Stream {
+                    message: &message,
+                    code: None,
+                }),
             )
             .await;
             return;

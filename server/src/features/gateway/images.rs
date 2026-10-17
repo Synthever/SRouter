@@ -17,7 +17,7 @@ use crate::error::APIError;
 use crate::features::api_keys::{APIPrincipal, ensure_model_allowed_any};
 use crate::features::gateway::RequestLogContext;
 use crate::features::gateway::interception::{
-    body_error_to_api_error, log_request, read_json_body,
+    LogError, body_error_to_api_error, log_request, read_json_body,
 };
 use crate::protocol::image::ImageGenerationRequest;
 use crate::protocol::usage::UsageBreakdown;
@@ -152,6 +152,7 @@ pub async fn create_image(
     };
 
     // Log request
+    let log_error = result.as_ref().err().map(LogError::Gateway);
     log_request(
         &state,
         &log_context,
@@ -160,7 +161,7 @@ pub async fn create_image(
         Some(&resolved.model),
         status_code,
         &UsageBreakdown::default(),
-        result.as_ref().err().map(|e| e.message()),
+        log_error.as_ref(),
     )
     .await;
 

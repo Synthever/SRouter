@@ -16,6 +16,7 @@ pub mod chat;
 pub mod images;
 pub mod interception;
 pub mod interceptor;
+pub mod limits;
 pub mod messages;
 pub mod routes;
 pub mod search;

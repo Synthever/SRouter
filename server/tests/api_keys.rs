@@ -454,3 +454,146 @@ async fn an_unlimited_key_reserves_any_budget() {
         .expect("the stored key");
     assert_eq!(key.usage_tokens, 0);
 }
+
+/// One completed chat request must bill the key once. The request-log insert and
+/// the quota settlement both used to write `usage_tokens`, so a 3-token answer
+/// left 6 tokens on the key.
+#[tokio::test]
+async fn a_completed_chat_request_bills_the_key_exactly_once() {
+    use std::sync::Arc;
+
+    use srouter_server::SecurityState;
+    use srouter_server::features::api_keys::{APIKeyRepository, CreateAPIKeyInput};
+    use srouter_server::infrastructure::database::admin_auth::SQLxAdminAuthStore;
+    use support::{app_state_with_fake_upstream_and_security, with_loopback_client};
+
+    let database = TestDatabase::new().unwrap();
+    let app_database = database.connect().await.unwrap();
+
+    let keys = Arc::new(SQLxAPIKeyStore::new(app_database.clone()));
+    let created = keys
+        .create(CreateAPIKeyInput {
+            name: "Billed once".to_owned(),
+            enabled: true,
+            rate_limit: 0,
+            quota_limit: 1_000_000,
+            credit_limit: 0.0,
+            allowed_models: None,
+        })
+        .await
+        .unwrap();
+
+    let security = SecurityState::with_repository(
+        keys.clone(),
+        Arc::new(SQLxAdminAuthStore::new(app_database.clone())),
+        keys.clone(),
+    );
+    let (_upstream, state) = app_state_with_fake_upstream_and_security(security).await;
+    let app = create_router(state.with_database(app_database));
+
+    let body = serde_json::json!({
+        "model": "opencode_zen/space-bunny-free",
+        "messages": [{ "role": "user", "content": "Hello" }]
+    });
+    let request = with_loopback_client(
+        Request::builder()
+            .method("POST")
+            .uri("/v1/chat/completions")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", created.secret))
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap(),
+    );
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let stored = keys
+        .list()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|key| key.id == created.key.id)
+        .expect("the stored key");
+
+    // The fake upstream answers with 3 total tokens; the reservation was 4096.
+    assert_eq!(
+        stored.usage_tokens, 3,
+        "one request must bill its own tokens once, not twice"
+    );
+}
+
+/// The auth cache carries `usage_tokens`, and `api_key_auth` rejects on it, so a
+/// usage write has to invalidate the cached record. Otherwise an exhausted key
+/// keeps authenticating until the process restarts.
+#[tokio::test]
+async fn a_usage_write_invalidates_the_cached_auth_record() {
+    use std::sync::Arc;
+
+    use srouter_server::features::api_keys::{APIKeyRepository, APIKeyStore, CreateAPIKeyInput};
+
+    let database = TestDatabase::new().unwrap();
+    let store = Arc::new(SQLxAPIKeyStore::new(database.connect().await.unwrap()));
+
+    let created = store
+        .create(CreateAPIKeyInput {
+            name: "Quota".to_owned(),
+            enabled: true,
+            rate_limit: 0,
+            quota_limit: 100,
+            credit_limit: 0.0,
+            allowed_models: None,
+        })
+        .await
+        .unwrap();
+
+    // Authenticate once, which caches the record at zero usage.
+    let cached = store.find_by_key(&created.secret).await.unwrap().unwrap();
+    assert_eq!(cached.usage_tokens, 0.0);
+
+    // The gateway's accounting pushes the key past its quota.
+    store.reserve_quota(&created.key.id, 80).await.unwrap();
+    store.settle_quota(&created.key.id, 80, 150).await.unwrap();
+
+    let refreshed = store.find_by_key(&created.secret).await.unwrap().unwrap();
+    assert_eq!(
+        refreshed.usage_tokens, 150.0,
+        "the cached record must not keep serving the pre-request count"
+    );
+    assert!(refreshed.usage_tokens >= refreshed.quota_limit);
+}
+
+/// A cost write feeds the credit check, so it invalidates the cache too.
+#[tokio::test]
+async fn a_cost_write_invalidates_the_cached_auth_record() {
+    use std::sync::Arc;
+
+    use srouter_server::features::api_keys::{APIKeyRepository, APIKeyStore, CreateAPIKeyInput};
+
+    let database = TestDatabase::new().unwrap();
+    let store = Arc::new(SQLxAPIKeyStore::new(database.connect().await.unwrap()));
+
+    let created = store
+        .create(CreateAPIKeyInput {
+            name: "Credit".to_owned(),
+            enabled: true,
+            rate_limit: 0,
+            quota_limit: 0,
+            credit_limit: 5.0,
+            allowed_models: None,
+        })
+        .await
+        .unwrap();
+
+    let cached = store.find_by_key(&created.secret).await.unwrap().unwrap();
+    assert_eq!(cached.usage_cost, 0.0);
+
+    store
+        .increment_usage(&created.key.id, 0, 7.5)
+        .await
+        .unwrap();
+
+    let refreshed = store.find_by_key(&created.secret).await.unwrap().unwrap();
+    assert_eq!(refreshed.usage_cost, 7.5);
+    assert!(refreshed.usage_cost >= refreshed.credit_limit);
+}

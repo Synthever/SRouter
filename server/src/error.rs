@@ -57,6 +57,18 @@ impl APIError {
         &self.message
     }
 
+    /// The wire spelling of the code, read through the same `snake_case` serde
+    /// rename the envelope uses, so a code written to the request log cannot
+    /// drift from the one the client was shown.
+    pub fn code_str(&self) -> Option<String> {
+        let code = self.code?;
+
+        match serde_json::to_value(code) {
+            Ok(serde_json::Value::String(name)) => Some(name),
+            _ => None,
+        }
+    }
+
     pub fn to_envelope(&self) -> ErrorEnvelope {
         ErrorEnvelope {
             error: ErrorBody {

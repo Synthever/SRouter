@@ -1,6 +1,7 @@
 //! Request-log rows and API-key quota accounting shared by the gateway routes.
 
 use crate::clock;
+use crate::error::APIError;
 use crate::features::gateway::RequestLogContext;
 use crate::features::providers::ResolvedModel;
 use crate::infrastructure::database::request_logs::{RequestLogInput, insert_request_log};
@@ -9,6 +10,12 @@ use crate::state::AppState;
 
 /// Writes one request-log row from a [`RequestLogContext`]. A process without a
 /// database logs nothing.
+///
+/// `error` carries the failure the row describes: the gateway passes the same
+/// [`APIError`] the client received, so the log records its code and message
+/// instead of a bare status. A streamed failure the upstream raised inside an
+/// otherwise successful response has no `APIError`, so the caller passes the
+/// code and message it recovered from the error event.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn log_request(
     state: &AppState,
@@ -18,13 +25,22 @@ pub(crate) async fn log_request(
     resolved_model: Option<&str>,
     status_code: u16,
     usage: &UsageBreakdown,
-    error_message: Option<&str>,
+    error: Option<&LogError<'_>>,
 ) {
     let estimated_cost = if status_code == 200 {
         crate::features::catalog::estimate_cost(resolved_model.unwrap_or(model), usage)
             .unwrap_or(0.0)
     } else {
         0.0
+    };
+    // `APIError` renders its code through serde, so the pair is built once here
+    // rather than borrowed out of the error for the insert.
+    let (error_code, error_message) = match error {
+        Some(LogError::Gateway(error)) => (error.code_str(), Some(error.message().to_owned())),
+        Some(LogError::Stream { message, code }) => {
+            (code.map(str::to_owned), Some((*message).to_owned()))
+        }
+        None => (None, None),
     };
 
     if let Some(db) = &state.database {
@@ -44,31 +60,43 @@ pub(crate) async fn log_request(
                 usage,
                 estimated_cost,
                 resolved_model,
-                error_code: None,
-                error_message,
+                error_code: error_code.as_deref(),
+                error_message: error_message.as_deref(),
                 created_at: clock::now_ms(),
             },
         )
         .await;
     }
 
-    apply_usage_accounting(state, context, status_code, usage).await;
+    apply_usage_accounting(state, context, status_code, usage, estimated_cost).await;
 }
 
-/// Settles or releases the API-key token budget reserved at chat admission
-/// (Node's `settleAPIKeyQuotaDB` / `releaseAPIKeyQuotaDB`). A completed request
-/// settles to the real token count and records the cost separately; every other
-/// outcome releases the reservation in full. Best-effort like the request log:
-/// an accounting failure never changes the response.
+/// The failure a request-log row records.
+pub(crate) enum LogError<'a> {
+    /// A rejection the gateway produced; its code is the one the client saw.
+    Gateway(&'a APIError),
+    /// A failure the upstream reported inside its stream, which carries its own
+    /// code only when the provider named one.
+    Stream {
+        message: &'a str,
+        code: Option<&'a str>,
+    },
+}
+
+/// Settles the API-key budget reserved at chat admission: the real token count
+/// replaces the reservation and the estimated cost is added to the key. A failed
+/// request releases the reservation in full instead.
 ///
-/// Node skips a successful response with `total_tokens == 0`, which leaves the
-/// whole reservation charged; here that case settles to zero so the budget is
-/// returned (recorded deviation).
+/// This is the only writer of `api_keys.usage_tokens`/`usage_cost`. It runs after
+/// the request-log insert, which deliberately leaves those columns alone so one
+/// request is billed once. Best-effort like the request log: an accounting
+/// failure never changes the response.
 async fn apply_usage_accounting(
     state: &AppState,
     context: &RequestLogContext,
     status_code: u16,
     usage: &UsageBreakdown,
+    estimated_cost: f64,
 ) {
     let (Some(api_key_id), Some(reserved)) =
         (context.api_key_id.as_deref(), context.reserved_tokens)
@@ -81,9 +109,9 @@ async fn apply_usage_accounting(
         let _ = repository
             .settle_quota(api_key_id, reserved, usage.total_tokens)
             .await;
-        // Token quota is settled above. API-key usage_cost is reserved for
-        // billing invoices rather than informational reference rates.
-        let _ = repository.increment_usage(api_key_id, 0, 0.0).await;
+        let _ = repository
+            .increment_usage(api_key_id, 0, estimated_cost)
+            .await;
     } else {
         let _ = repository.settle_quota(api_key_id, reserved, 0).await;
     }

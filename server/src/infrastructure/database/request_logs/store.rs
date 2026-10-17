@@ -519,18 +519,6 @@ pub async fn insert_request_log(
         )
     })?;
 
-    if let Some(key_id) = input.api_key_id
-        && (input.usage.total_tokens > 0 || input.estimated_cost > 0.0)
-    {
-        let _ = sqlx::query(
-                "UPDATE api_keys SET usage_tokens = usage_tokens + ?, usage_cost = usage_cost + ? WHERE id = ?",
-            )
-            .bind(input.usage.total_tokens)
-            .bind(input.estimated_cost)
-            .bind(key_id)
-            .execute(&pool)
-            .await;
-    }
     publish_request_log(log_uuid);
     Ok(log_id)
 }

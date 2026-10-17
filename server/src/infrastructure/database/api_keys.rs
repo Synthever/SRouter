@@ -363,6 +363,11 @@ impl APIKeyRepository for SQLxAPIKeyStore {
                     constants::database::context::SETTLE_API_KEY_QUOTA,
                 ))?;
 
+            // The cached auth record carries `usage_tokens`, and `api_key_auth`
+            // rejects on it. Without this the cache keeps serving the pre-request
+            // count, so an exhausted key authenticates until a restart.
+            self.clear_cache();
+
             Ok(())
         })
     }
@@ -389,6 +394,9 @@ impl APIKeyRepository for SQLxAPIKeyStore {
             .map_err(sql_error(
                 constants::database::context::INCREMENT_API_KEY_USAGE,
             ))?;
+
+            // Same reason as `settle_quota`: `usage_cost` feeds the credit check.
+            self.clear_cache();
 
             Ok(())
         })
