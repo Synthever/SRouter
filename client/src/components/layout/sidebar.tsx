@@ -3,6 +3,7 @@ import {
   Cpu,
   KeyRound,
   LayoutDashboard,
+  MessagesSquare,
   PanelLeftClose,
   Settings,
   Terminal,
@@ -17,7 +18,13 @@ import { UserMenu } from "@/components/arc/user-menu/user-menu"
 import { useTheme } from "@/components/theme-provider"
 
 export type DashboardTab =
-  "overview" | "providers" | "usage" | "logs" | "keys" | "settings"
+  | "overview"
+  | "providers"
+  | "playground"
+  | "usage"
+  | "logs"
+  | "keys"
+  | "settings"
 
 /**
  * The section names, keyed by their tab. The rail labels each row with it and
@@ -27,6 +34,7 @@ export type DashboardTab =
 export const TAB_LABELS = {
   overview: "Overview",
   providers: "Providers",
+  playground: "Model playground",
   usage: "Usage and quota",
   logs: "Request logs",
   keys: "API keys",
@@ -49,6 +57,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "overview", icon: LayoutDashboard },
       { id: "providers", icon: Cpu },
+      { id: "playground", icon: MessagesSquare },
       { id: "usage", icon: BarChart3 },
       { id: "logs", icon: Terminal },
       { id: "keys", icon: KeyRound },
