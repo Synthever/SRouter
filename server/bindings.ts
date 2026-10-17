@@ -173,6 +173,17 @@ export type CreatedAPIKeyResponse = {
 	key: string,
 } & APIKeyResponse;
 
+/**
+ *  `POST /v1/admin/database/import`. A struct rather than a `json!` literal so
+ *  the client imports the shape instead of declaring it; the JSON is unchanged.
+ */
+export type DatabaseImportResponse = {
+	ok: boolean,
+	backup_path: string,
+	restart_required: boolean,
+	reauth_required: boolean,
+};
+
 export type ErrorBody = {
 	message: string,
 	type: string,
@@ -503,6 +514,16 @@ export type SettingsResponse = {
 };
 
 /**
+ *  `GET /v1/admin/system`. The version is the crate's, so a rebuild is what
+ *  changes it.
+ */
+export type SystemResponse = {
+	version: string,
+	database_path: string,
+	schema_version: number,
+};
+
+/**
  *  Partial update accepted by `PATCH /v1/keys/:id`. Every field is optional;
  *  absent fields are left untouched. `allowed_models` distinguishes absent
  *  (`None`) from an explicit clear (`Some(None)`).
@@ -514,6 +535,21 @@ export type UpdateAPIKeyInput = {
 	quota_limit?: number | null,
 	credit_limit?: number | null,
 	allowed_models?: string[] | null,
+};
+
+/**
+ *  Fields accepted by `PATCH`/`POST /v1/settings`, as the client builds them.
+ *  Derives only `specta::Type` (like `AdminLoginInput`): the hand-written parser
+ *  stays the authority, and the derive exists so the client's body cannot drift
+ *  from the shape this same struct is parsed into.
+ */
+export type UpdateSettingsInput = {
+	require_api_key?: boolean | null,
+	/**
+	 *  String-valued settings rows, mirroring Node's `UpdateSettingsSchema`
+	 *  (`z.record(z.string())`). A `BTreeMap` keeps the write order stable.
+	 */
+	settings?: { [key in string]: string } | null,
 };
 
 /**  One `by_model` entry of [`UsageStatsReport`]. */

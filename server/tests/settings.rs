@@ -7,16 +7,20 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use sha2::{Digest, Sha256};
+use srouter_server::AppState;
 use srouter_server::app::create_router;
+use srouter_server::constants;
 use srouter_server::features::admin_auth::hash_session_token;
+use srouter_server::features::providers::ProviderRegistry;
 use support::{
-    TestDatabase, empty_registry_state, json_request, json_request_with_headers,
-    sqlx_security_state, with_loopback_client, with_remote_client,
+    TestDatabase, json_request, json_request_with_headers, sqlx_security_state, test_config,
+    with_loopback_client, with_remote_client,
 };
 use tower::ServiceExt;
 
 const SESSION_TOKEN: &str = "test-session-token";
 const SETTINGS_URI: &str = "/v1/settings";
+const SYSTEM_URI: &str = "/v1/admin/system";
 const REMOTE_IP: &str = "203.0.113.7";
 const TEST_API_KEY: &str = "sr-live-settings-test-key-12345";
 
@@ -29,7 +33,11 @@ async fn setup_app(database: &TestDatabase) -> (Router, sqlx::SqlitePool) {
         .unwrap()
         .clone();
     let security = sqlx_security_state(database, vec![hash_session_token(SESSION_TOKEN)]).await;
-    let state = empty_registry_state(security)
+    // The system facts read `config.database_path`, so the app has to be built
+    // from this test database's own configuration rather than the default one.
+    let mut config = test_config();
+    config.database_path = database.path().to_path_buf();
+    let state = AppState::with_security(config, ProviderRegistry::new(), security)
         .with_database(database.connect().await.expect("connect database"));
 
     (create_router(state), pool)
@@ -342,4 +350,81 @@ async fn update_settings_rejects_invalid_payloads() {
         let body = json_body(response).await;
         assert_eq!(body["error"]["message"], "Invalid settings payload");
     }
+}
+
+#[tokio::test]
+async fn get_system_requires_an_admin_session() {
+    let database = TestDatabase::new().unwrap();
+    let (app, pool) = setup_app(&database).await;
+    insert_test_api_key(&pool).await;
+
+    // Anonymous loopback: the admin guard does not trust the local address.
+    let response = app.clone().oneshot(get_request(SYSTEM_URI)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = json_body(response).await;
+    assert_eq!(body["error"]["code"], "authentication_required");
+
+    // Anonymous remote.
+    let response = app
+        .clone()
+        .oneshot(remote_get_request(SYSTEM_URI))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = json_body(response).await;
+    assert_eq!(body["error"]["code"], "authentication_required");
+
+    // A gateway API key is not an admin session.
+    let response = app
+        .oneshot(api_key_get_request(SYSTEM_URI, TEST_API_KEY))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = json_body(response).await;
+    assert_eq!(body["error"]["code"], "authentication_required");
+}
+
+#[tokio::test]
+async fn get_system_reports_version_database_path_and_schema_version() {
+    let database = TestDatabase::new().unwrap();
+    let (app, pool) = setup_app(&database).await;
+
+    let response = app
+        .oneshot(admin_request("GET", SYSTEM_URI, serde_json::Value::Null))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let schema_version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let body = json_body(response).await;
+
+    assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(body["database_path"], database.path().display().to_string());
+    assert_eq!(body["schema_version"], schema_version);
+}
+
+#[tokio::test]
+async fn get_system_is_absent_from_the_compat_nest() {
+    let database = TestDatabase::new().unwrap();
+    let (app, _) = setup_app(&database).await;
+
+    let response = app
+        .oneshot(get_request("/v1/v1/admin/system"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let body = json_body(response).await;
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "error": {
+                "message": constants::common::NOT_FOUND,
+                "type": "invalid_request_error"
+            }
+        })
+    );
 }

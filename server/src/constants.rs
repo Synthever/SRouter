@@ -710,6 +710,10 @@ pub mod providers {
 pub mod settings {
     pub const INVALID_PAYLOAD: &str = "Invalid settings payload";
     pub const DATABASE_REQUIRED: &str = "no database is configured; settings cannot be persisted";
+    /// `GET /v1/admin/system` on an install that booted without a database. The
+    /// write-side message above would misdescribe a read.
+    pub const SYSTEM_DATABASE_REQUIRED: &str =
+        "no database is configured; database facts are unavailable";
 }
 
 /// `/v1/logs` and the usage event stream.

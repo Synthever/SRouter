@@ -25,7 +25,9 @@ use crate::features::provider_auth::{
 use crate::features::providers::management::{
     create_custom_provider_router, create_providers_management_router, create_providers_read_router,
 };
-use crate::features::settings::{create_settings_management_router, create_settings_read_router};
+use crate::features::settings::{
+    create_settings_management_router, create_settings_read_router, create_system_router,
+};
 use crate::http::middleware::access_log::log_access;
 use crate::http::middleware::admin_session::require_admin_session;
 use crate::http::middleware::api_key_auth::api_key_auth;
@@ -141,6 +143,10 @@ pub fn create_router(state: AppState) -> Router {
         create_settings_read_router().layer(from_fn_with_state(state.clone(), api_key_auth));
     let settings_mgmt_routes = create_settings_management_router()
         .layer(from_fn_with_state(state.clone(), require_admin_session));
+    // The system facts the settings screen prints are operator data, so they
+    // carry the same guard as the database transfer routes.
+    let system_routes =
+        create_system_router().layer(from_fn_with_state(state.clone(), require_admin_session));
     // Database transfer is admin-session only; API keys and loopback do not
     // authorize (`apps/api/src/routes/v1/database.ts:21`).
     let database_routes =
@@ -174,6 +180,7 @@ pub fn create_router(state: AppState) -> Router {
         .merge(pricing_routes)
         .merge(settings_read_routes)
         .merge(settings_mgmt_routes)
+        .merge(system_routes)
         .merge(database_routes)
         .fallback(route_not_found)
         .layer(from_fn_with_state(state.clone(), csrf_origin_guard))

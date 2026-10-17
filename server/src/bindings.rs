@@ -19,6 +19,9 @@
 //! | `HealthResponse`        | `GET /health`                                  |
 //! | `ApiInfo`               | `GET /`, `GET /v1`                             |
 //! | `SettingsResponse`      | `GET`, `PATCH` `/v1/settings`                  |
+//! | `SystemResponse`        | `GET /v1/admin/system`                         |
+//! | `UpdateSettingsInput`   | `PATCH` `/v1/settings` body                    |
+//! | `DatabaseImportResponse` | `POST /v1/admin/database/import`              |
 //! | `AdminStatus`           | `GET /v1/admin/status`                         |
 //! | `AdminAuthResult`       | `POST /v1/admin/setup`, `POST /v1/admin/login` |
 //! | `AdminSetupInput`       | `POST /v1/admin/setup` body                    |
@@ -61,6 +64,7 @@ use crate::features::api_keys::{CreateAPIKeyInput, UpdateAPIKeyInput};
 use crate::features::catalog::models::{CatalogModel, ModelListResponse};
 use crate::features::catalog::pricing::PricingListResponse;
 use crate::features::catalog::quota::QuotaResponse;
+use crate::features::database_transfer::routes::DatabaseImportResponse;
 use crate::features::logs::{LiveEvent, LogsResponse};
 use crate::features::providers::management::VerifyResponse;
 use crate::features::providers::management::model::{
@@ -70,7 +74,7 @@ use crate::features::providers::management::model::{
 use crate::features::providers::management::routes::ProviderListResponse;
 use crate::features::providers::model::ProviderProtocol;
 use crate::features::providers::quota::{LiveModelQuotaItem, ProviderQuotaAccount};
-use crate::features::settings::SettingsResponse;
+use crate::features::settings::{SettingsResponse, SystemResponse, UpdateSettingsInput};
 use crate::infrastructure::database::request_logs::{
     AnalyticsReport, RequestLog, UsageCacheTokens, UsageCostTotals, UsageData, UsageRequestTotals,
     UsageStatsReport, UsageTokenTotals, UsageTotals,
@@ -87,6 +91,9 @@ pub fn types() -> Types {
         .register::<ErrorEnvelope>()
         .register::<ErrorCode>()
         .register::<SettingsResponse>()
+        .register::<SystemResponse>()
+        .register::<UpdateSettingsInput>()
+        .register::<DatabaseImportResponse>()
         .register::<AdminStatus>()
         .register::<AdminAuthResult>()
         .register::<AdminSetupInput>()

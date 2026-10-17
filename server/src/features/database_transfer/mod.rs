@@ -22,7 +22,7 @@
 //! - The transfer lock keeps both owner modes (`transfer` and `operation`).
 
 mod multipart;
-mod routes;
+pub(crate) mod routes;
 mod transfer;
 
 pub use routes::create_database_router;

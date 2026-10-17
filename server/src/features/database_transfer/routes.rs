@@ -10,7 +10,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde_json::json;
+use serde::Serialize;
 
 use crate::clock::now_ms;
 use crate::error::APIError;
@@ -115,6 +115,16 @@ fn export_response(output_path: &std::path::Path) -> Result<Response, APIError> 
     Ok(response)
 }
 
+/// `POST /v1/admin/database/import`. A struct rather than a `json!` literal so
+/// the client imports the shape instead of declaring it; the JSON is unchanged.
+#[derive(Serialize, specta::Type)]
+pub struct DatabaseImportResponse {
+    pub ok: bool,
+    pub backup_path: String,
+    pub restart_required: bool,
+    pub reauth_required: bool,
+}
+
 /// `POST /v1/admin/database/import`.
 async fn import_handler(
     State(state): State<AppState>,
@@ -148,12 +158,12 @@ async fn import_handler(
     let _ = std::fs::remove_dir_all(&directory);
 
     let import = result?;
-    let mut response = Json(json!({
-        "ok": true,
-        "backup_path": import.backup_path,
-        "restart_required": import.restart_required,
-        "reauth_required": import.reauth_required,
-    }))
+    let mut response = Json(DatabaseImportResponse {
+        ok: true,
+        backup_path: import.backup_path,
+        restart_required: import.restart_required,
+        reauth_required: import.reauth_required,
+    })
     .into_response();
     // The replacement invalidates the operator's session, so the cookie is
     // cleared and they re-authenticate.
