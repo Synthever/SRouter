@@ -147,7 +147,7 @@ cargo fmt --manifest-path server/Cargo.toml -- --check
 cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
 ```
 
-Server-nya satu crate, tanpa workspace dan tanpa DI container. `server/tests/` memuat suite integrasi, dan setiap suite membuat database SQLite sementara sendiri plus upstream palsu, jadi test tidak pernah menyentuh data aslimu atau menghubungi provider sungguhan. Tidak ada CI: jalankan sendiri suite-nya sebelum push.
+Server-nya satu crate, tanpa workspace dan tanpa DI container. `server/tests/` memuat suite integrasi, dan setiap suite membuat database SQLite sementara sendiri plus upstream palsu, jadi test tidak pernah menyentuh data aslimu atau menghubungi provider sungguhan. CI (`.github/workflows/ci.yml`) mengulang suite-nya plus `fmt`/`clippy` dan lint, typecheck, serta build client pada push ke `main` dan pull request ke sana, tapi tetap jalankan suite-nya sendiri sebelum push.
 
 Tipe wire dibagi ke client lewat TypeScript yang di-generate. Setelah mengubah tipe Rust:
 
@@ -159,11 +159,22 @@ cargo run --manifest-path server/Cargo.toml --bin export_ts   # menulis ulang ke
 
 Untuk bahan yang lebih dalam: `CONTRIBUTING.md` membahas build dan konvensi commit, `SECURITY.md` menjelaskan di mana kredensial berada dan apa yang dihitung sebagai kerentanan, dan `skills/srouter-server/` mendokumentasikan arsitektur crate ini.
 
+## Container
+
+`Dockerfile` membangun server dan dashboard menjadi satu image, dan `docker-compose.yml` menjalankannya dengan volume bernama di `/data`. `Makefile` membungkus perintah-perintah di atas supaya kamu tidak perlu menulis ulang flag `--manifest-path`:
+
+```bash
+docker compose up -d        # builds the image, serves API + dashboard on :3000
+make                        # lists the wrapped build, test, and image targets
+```
+
+Penerbitan image dilakukan manual: Actions -> `docker-publish` -> "Run workflow", tanpa trigger `push` atau tag, jadi tidak pernah jalan sendiri. `docker compose down -v` menghapus volume yang menyimpan database SQLite beserta seluruh kredensial provider di dalamnya; pakai `docker compose down` kalau hanya ingin menghentikan container.
+
 ## Kondisi saat ini
 
 Repositori ini dipangkas menjadi crate server dan dashboard pada Oktober 2026. Yang dihapus: `apps/api` Node yang jadi sumber port server Rust, tujuh package workspace `packages/*`, CLI, dan situs dokumentasi. Kode lamanya masih bisa dibaca di branch `backup/pre-packages-removal` dan `backup/pre-apps-api-removal`.
 
-Yang ada sekarang adalah server plus dashboard yang masih awal. Belum ada Dockerfile, belum ada workflow CI, dan belum ada release bertag untuk versi crate saat ini (tag terakhir, v0.1.8, milik era Node).
+Yang ada sekarang adalah server plus dashboard yang masih awal. Belum ada release bertag untuk versi crate saat ini (tag terakhir, v0.1.8, milik era Node).
 
 ## Lisensi
 

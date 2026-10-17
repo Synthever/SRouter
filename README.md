@@ -147,7 +147,7 @@ cargo fmt --manifest-path server/Cargo.toml -- --check
 cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
 ```
 
-The server is one crate, no workspace and no DI container. `server/tests/` holds the integration suites, and each one builds its own temporary SQLite database and fake upstreams, so tests never touch your real data or reach a real provider. There is no CI: run the suite yourself before you push.
+The server is one crate, no workspace and no DI container. `server/tests/` holds the integration suites, and each one builds its own temporary SQLite database and fake upstreams, so tests never touch your real data or reach a real provider. CI (`.github/workflows/ci.yml`) re-runs the suite, `fmt`, `clippy`, and the client's lint/typecheck/build on pushes to `main` and pull requests into it, but run the suite yourself before you push.
 
 Wire types are shared with the client through generated TypeScript. After touching a Rust type:
 
@@ -159,11 +159,22 @@ cargo run --manifest-path server/Cargo.toml --bin export_ts   # rewrites both co
 
 For deeper material, `CONTRIBUTING.md` covers the build and commit conventions, `SECURITY.md` explains where credentials live and what counts as a vulnerability, and `skills/srouter-server/` documents the crate's architecture for debugging work.
 
+## Container
+
+`Dockerfile` builds the server and the dashboard into one image, and `docker-compose.yml` runs it with a named volume at `/data`. `Makefile` wraps the commands above so you do not have to retype the `--manifest-path` flags:
+
+```bash
+docker compose up -d        # builds the image, serves API + dashboard on :3000
+make                        # lists the wrapped build, test, and image targets
+```
+
+Publishing the image is manual: Actions -> `docker-publish` -> "Run workflow", with no `push` or tag trigger, so it never fires on its own. `docker compose down -v` deletes the volume that holds the SQLite database and therefore every stored provider credential; use `docker compose down` when you only want to stop the container.
+
 ## Current state
 
 The repository was stripped to the server crate and the dashboard in October 2026. Removed: the Node `apps/api` the Rust server was ported from, the seven `packages/*` workspace packages, the CLI, and the documentation site. The old code stays readable on the branches `backup/pre-packages-removal` and `backup/pre-apps-api-removal`.
 
-What exists today is the server plus an early dashboard. No Dockerfile, no CI workflow, no tagged release for the current crate version yet (the last tag, v0.1.8, belongs to the Node era).
+What exists today is the server plus an early dashboard. No tagged release for the current crate version yet (the last tag, v0.1.8, belongs to the Node era).
 
 ## License
 
