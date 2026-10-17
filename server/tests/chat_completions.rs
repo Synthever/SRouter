@@ -1371,6 +1371,30 @@ async fn upstream_concurrency_semaphore_rejects_with_429_when_saturated() {
 }
 
 #[tokio::test]
+async fn opencode_zen_rejects_requests_exceeding_300k_context() {
+    let (_fake, state) = app_state_with_fake_upstream().await;
+    let app = srouter_server::app::create_router(state);
+
+    // Create a body with max_tokens pushing total over 300_000
+    let body = serde_json::json!({
+        "model": "opencode_zen/space-bunny-free",
+        "messages": [{ "role": "user", "content": "hello" }],
+        "max_tokens": 300_005
+    });
+
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let json = json_body(response).await;
+    assert_eq!(json["error"]["type"], "invalid_request_error");
+    assert_eq!(json["error"]["code"], "context_length_exceeded");
+    assert_eq!(json["error"]["param"], "messages");
+}
+
+#[tokio::test]
 async fn a_completed_request_settles_the_reservation_to_the_real_tokens() {
     let (_upstream, repository, app) = keyed_app(true).await;
     let body = serde_json::json!({

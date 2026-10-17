@@ -37,17 +37,32 @@ specta-typescript = "=0.0.12"
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }
 
-# Disk footprint tuning.
-# Full debuginfo (debug = 2, the default) made every test binary ~180 MB:
-# ~85% of each binary was .debug_* sections from the whole dependency graph,
-# and Cargo keeps one binary per (unit-hash, target), so the target/ dir grew
-# to 32 GB. line-tables-only keeps file:line in backtraces at a fraction of
-# the size; dependencies carry no debuginfo at all.
+# Disk footprint tuning. The three settings trade rebuild time and backtrace
+# precision for bytes; measured on this workspace (42 integration suites).
+#
+# debug = 1: full debuginfo (debug = 2, the default) made every test binary
+# ~180 MB -- ~85% of each was .debug_* from the whole dependency graph, and
+# cargo keeps one artifact per (unit-hash, target), so target/ grew to 32 GB.
+# Line-tables-only keeps file:line in backtraces at a fraction of the size;
+# dependencies carry no debuginfo at all.
+#
+# strip = "debuginfo": strips the *linked* artifact only, so the crate's own
+# line-tables are dropped too while .symtab/.strtab survive -- `crate::fn`
+# frames still resolve in a backtrace, file:line does not. Halves each of the
+# 42 test executables (79 MB -> 44 MB).
+#
+# incremental = false: incremental/ is a pure build-speed cache and was the
+# largest single directory (5.4 GB) after a week of churn. Off costs ~9 s on a
+# `cargo build` and ~26 s on a `cargo test --no-run` after touching lib.rs.
 [profile.dev]
 debug = 1
+strip = "debuginfo"
+incremental = false
 
 [profile.test]
 debug = 1
+strip = "debuginfo"
+incremental = false
 
 [profile.dev.package."*"]
 debug = false

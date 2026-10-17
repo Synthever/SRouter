@@ -59,6 +59,8 @@ pub async fn create_completion(
         &state.providers.model_id_variants(&chat_request.model),
     )?;
 
+    ensure_within_context_limit(&chat_request)?;
+
     // Normalize `developer` messages to `system` to match the frozen API v1 contract.
     for message in &mut chat_request.messages {
         if message.role == ChatRole::Developer {
@@ -146,6 +148,60 @@ async fn reserve_api_key_quota(
 
 fn unregistered_model(model: &str) -> APIError {
     APIError::new(404, constants::gateway::model_not_registered(model))
+}
+
+const OPENCODE_ZEN_MAX_CONTEXT: usize = 300_000;
+
+fn ensure_within_context_limit(request: &ChatCompletionRequest) -> Result<(), APIError> {
+    let model = request.model.to_lowercase();
+    let is_opencode_zen = model.starts_with("opencode_zen/")
+        || model.starts_with("zen/")
+        || model.starts_with("opencode/");
+
+    if is_opencode_zen {
+        let estimated_prompt = estimate_request_tokens(request);
+        let max_output = request.max_tokens.unwrap_or(0) as usize;
+        let total_requested = estimated_prompt.saturating_add(max_output);
+
+        if total_requested > OPENCODE_ZEN_MAX_CONTEXT {
+            return Err(APIError::new(
+                400,
+                constants::gateway::context_length_exceeded(
+                    OPENCODE_ZEN_MAX_CONTEXT,
+                    total_requested,
+                ),
+            )
+            .with_code(constants::ErrorCode::ContextLengthExceeded)
+            .with_param("messages"));
+        }
+    }
+
+    Ok(())
+}
+
+fn estimate_request_tokens(request: &ChatCompletionRequest) -> usize {
+    use crate::protocol::model::ChatContent;
+
+    let mut tokens = 0;
+    for message in &request.messages {
+        tokens += 4;
+        match &message.content {
+            ChatContent::Text(text) => {
+                tokens += text.chars().count().div_ceil(4);
+            }
+            ChatContent::Parts(parts) => {
+                for part in parts {
+                    if let Some(text) = &part.text {
+                        tokens += text.chars().count().div_ceil(4);
+                    } else if part.image_url.is_some() {
+                        tokens += 1600;
+                    }
+                }
+            }
+            ChatContent::Null => {}
+        }
+    }
+    tokens
 }
 
 /// Runs the streaming completion with server-side tool interception support.

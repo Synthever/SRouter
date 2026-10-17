@@ -39,12 +39,16 @@ pub const OPENCODE_ZEN_MODELS: &[ModelDefinition] = &[
         name: "Space Bunny Free",
     },
     ModelDefinition {
+        id: "beam-free",
+        name: "Beam Free",
+    },
+    ModelDefinition {
         id: "nemotron-3.5-lightning-free",
         name: "Nemotron 3.5 Lightning Free",
     },
     ModelDefinition {
-        id: "nemotron-3-ultra-free",
-        name: "Nemotron 3 Ultra Free",
+        id: "nemotron-3.5-super-vl-free",
+        name: "Nemotron 3.5 Super VL Free",
     },
     ModelDefinition {
         id: "mimo-v2.6-flash-free",
@@ -59,8 +63,8 @@ pub const OPENCODE_ZEN_MODELS: &[ModelDefinition] = &[
         name: "LongCat 2.5 Preview Free",
     },
     ModelDefinition {
-        id: "step-5-preview-free",
-        name: "Step 5 Preview Free",
+        id: "glm-5.3-flash-free",
+        name: "GLM-5.3-Flash Free",
     },
     ModelDefinition {
         id: "deepseek-v4.1-flash-free",

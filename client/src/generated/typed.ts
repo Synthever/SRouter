@@ -207,6 +207,8 @@ export type ErrorCode =
 "authentication_required" | "invalid_credentials" | "invalid_password" | "password_mismatch" | "password_update_failed" | "setup_local_only" | "setup_already_complete" | 
 /**  Cross-origin guard. */
 "csrf_origin_rejected" | 
+/**  Gateway limits. */
+"context_length_exceeded" | 
 /**  Upstream provider failure. */
 "upstream_unavailable" | 
 /**
@@ -622,6 +624,7 @@ export const ErrorCode = {
 	setup_local_only: "setup_local_only",
 	setup_already_complete: "setup_already_complete",
 	csrf_origin_rejected: "csrf_origin_rejected",
+	context_length_exceeded: "context_length_exceeded",
 	upstream_unavailable: "upstream_unavailable",
 	unsupported_storage: "unsupported_storage",
 	invalid_database: "invalid_database",

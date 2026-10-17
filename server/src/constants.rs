@@ -63,6 +63,9 @@ pub enum ErrorCode {
     /// Cross-origin guard.
     CsrfOriginRejected,
 
+    /// Gateway limits.
+    ContextLengthExceeded,
+
     /// Upstream provider failure.
     UpstreamUnavailable,
 
@@ -293,6 +296,12 @@ pub mod gateway {
 
     pub fn could_not_build_stream(error: impl std::fmt::Display) -> String {
         format!("could not build the stream response: {error}")
+    }
+
+    pub fn context_length_exceeded(max: usize, requested: usize) -> String {
+        format!(
+            "This model's maximum context length is {max} tokens. However, your request resulted in {requested} tokens."
+        )
     }
 
     /// Messages mirroring the frozen Zod schema errors in

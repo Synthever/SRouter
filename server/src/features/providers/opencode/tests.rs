@@ -36,12 +36,13 @@ fn opencode_zen_exposes_verified_free_models() {
         ids,
         [
             "space-bunny-free",
+            "beam-free",
             "nemotron-3.5-lightning-free",
-            "nemotron-3-ultra-free",
+            "nemotron-3.5-super-vl-free",
             "mimo-v2.6-flash-free",
             "big-pickle",
             "longcat-2.5-preview-free",
-            "step-5-preview-free",
+            "glm-5.3-flash-free",
             "deepseek-v4.1-flash-free",
         ]
     );
