@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowUp,
@@ -20,10 +20,10 @@ import { Badge } from "@/components/arc/badge/badge"
 import { Button } from "@/components/arc/button/button"
 import { CopyButton } from "@/components/arc/copy-button/copy-button"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
-import { SearchField } from "@/components/arc/search-field/search-field"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
 import { Textarea } from "@/components/ui/textarea"
+import { PlaygroundModelPicker } from "@/components/playground/PlaygroundModelPicker"
 
 const HISTORY_LIMIT = 40
 const MAX_TOKENS_PRESETS = [128, 512, 2048] as const
@@ -51,13 +51,70 @@ function formatUsage(usage: PlaygroundUsage | undefined): string | null {
 }
 
 /**
+ * One conversation bubble, memoized: a streaming delta re-renders only the
+ * assistant entry actually receiving text, so long threads stay smooth while
+ * tokens arrive. Non-streaming entries keep a stable reference via `memo`'s
+ * shallow prop compare — `usage`/`content` objects are replaced only when
+ * patched, never mutated.
+ */
+const PlaygroundMessageItem = memo(function PlaygroundMessageItem({
+  entry,
+}: {
+  entry: ChatEntry
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-1 ${
+        entry.role === "user" ? "items-end" : "items-start"
+      }`}
+    >
+      <div
+        className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${
+          entry.role === "user"
+            ? "bg-foreground/10 text-foreground"
+            : "border border-border bg-surface-muted/40 text-foreground"
+        }`}
+      >
+        {entry.content.length > 0 ? (
+          entry.content
+        ) : entry.streaming ? (
+          <LoaderCircle
+            size={14}
+            className="animate-spin text-muted-foreground"
+            aria-label="Assistant is responding"
+          />
+        ) : null}
+        {entry.error && (
+          <span className="mt-1 block text-xs text-danger">{entry.error}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+        {entry.role === "assistant" && !entry.streaming && (
+          <>
+            {entry.latencyMs !== undefined && <span>{entry.latencyMs} ms</span>}
+            {formatUsage(entry.usage) && (
+              <span>· {formatUsage(entry.usage)}</span>
+            )}
+            {entry.content && (
+              <CopyButton value={entry.content} iconOnly variant="plain" />
+            )}
+          </>
+        )}
+        {entry.role === "user" && entry.content && (
+          <CopyButton value={entry.content} iconOnly variant="plain" />
+        )}
+      </div>
+    </div>
+  )
+})
+
+/**
  * Operator chat console: pick any model the gateway advertises and talk to it
  * directly. Requests ride the admin session like every other screen; streams
  * are aborted client-side by the Stop button, which cancels the upstream call.
  */
 export function PlaygroundView() {
   const modelsQuery = useQuery(modelListQuery)
-  const [modelSearch, setModelSearch] = useState("")
   const [model, setModel] = useState<string | null>(null)
   const [systemPrompt, setSystemPrompt] = useState("")
   const [maxTokens, setMaxTokens] = useState<number>(512)
@@ -70,19 +127,6 @@ export function PlaygroundView() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   const models = useMemo(() => modelsQuery.data?.data ?? [], [modelsQuery.data])
-
-  const filteredModels = useMemo(() => {
-    const q = modelSearch.trim().toLowerCase()
-    const favoritesFirst = [...models].sort((a, b) => {
-      if (a.favorite !== b.favorite) return a.favorite ? -1 : 1
-      return a.id.localeCompare(b.id)
-    })
-    if (!q) return favoritesFirst
-    return favoritesFirst.filter(
-      (m) =>
-        m.id.toLowerCase().includes(q) || m.owned_by.toLowerCase().includes(q)
-    )
-  }, [models, modelSearch])
 
   const effectiveModel = model ?? models[0]?.id ?? null
 
@@ -103,6 +147,26 @@ export function PlaygroundView() {
     if (node) node.scrollTop = node.scrollHeight
   }, [])
 
+  // Streaming deltas land in quick bursts; scrolling on every one forces
+  // synchronous layout each frame. Pin to bottom only while the operator is
+  // already reading the tail (they can scroll up to inspect mid-answer).
+  const followRef = useRef(true)
+  useEffect(() => {
+    const node = scrollRef.current
+    if (node) {
+      const onScroll = () => {
+        followRef.current =
+          node.scrollHeight - node.scrollTop - node.clientHeight < 48
+      }
+      node.addEventListener("scroll", onScroll, { passive: true })
+      return () => node.removeEventListener("scroll", onScroll)
+    }
+  }, [])
+
+  const maybeScrollToBottom = useCallback(() => {
+    if (followRef.current) requestAnimationFrame(scrollToBottom)
+  }, [scrollToBottom])
+
   const stop = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
@@ -121,7 +185,6 @@ export function PlaygroundView() {
     setInput("")
     setStreamingModel(effectiveModel)
     requestAnimationFrame(scrollToBottom)
-
     const history: PlaygroundMessage[] = []
     if (systemPrompt.trim()) {
       history.push({ role: "system", content: systemPrompt.trim() })
@@ -145,7 +208,7 @@ export function PlaygroundView() {
               : entry
           )
         )
-        requestAnimationFrame(scrollToBottom)
+        maybeScrollToBottom()
       } else {
         patchEntry(assistantEntry, {
           streaming: false,
@@ -204,6 +267,7 @@ export function PlaygroundView() {
     appendEntry,
     patchEntry,
     scrollToBottom,
+    maybeScrollToBottom,
   ])
 
   const clear = useCallback(() => {
@@ -256,59 +320,7 @@ export function PlaygroundView() {
             </div>
           ) : (
             entries.map((entry) => (
-              <div
-                key={entry.id}
-                className={`flex flex-col gap-1 ${entry.role === "user" ? "items-end" : "items-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${
-                    entry.role === "user"
-                      ? "bg-foreground/10 text-foreground"
-                      : "border border-border bg-surface-muted/40 text-foreground"
-                  }`}
-                >
-                  {entry.content.length > 0 ? (
-                    entry.content
-                  ) : entry.streaming ? (
-                    <LoaderCircle
-                      size={14}
-                      className="animate-spin text-muted-foreground"
-                      aria-label="Assistant is responding"
-                    />
-                  ) : null}
-                  {entry.error && (
-                    <span className="mt-1 block text-xs text-danger">
-                      {entry.error}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
-                  {entry.role === "assistant" && !entry.streaming && (
-                    <>
-                      {entry.latencyMs !== undefined && (
-                        <span>{entry.latencyMs} ms</span>
-                      )}
-                      {formatUsage(entry.usage) && (
-                        <span>· {formatUsage(entry.usage)}</span>
-                      )}
-                      {entry.content && (
-                        <CopyButton
-                          value={entry.content}
-                          iconOnly
-                          variant="plain"
-                        />
-                      )}
-                    </>
-                  )}
-                  {entry.role === "user" && entry.content && (
-                    <CopyButton
-                      value={entry.content}
-                      iconOnly
-                      variant="plain"
-                    />
-                  )}
-                </div>
-              </div>
+              <PlaygroundMessageItem key={entry.id} entry={entry} />
             ))
           )}
         </div>
@@ -363,54 +375,12 @@ export function PlaygroundView() {
             <FlaskConical size={14} className="text-muted-foreground" />
             <h2 className="text-sm font-medium text-foreground">Model</h2>
           </div>
-          <div className="mt-3">
-            <SearchField
-              label="Search models"
-              id="playground-model-filter"
-              value={modelSearch}
-              onValueChange={setModelSearch}
-              placeholder="Filter by id or owner..."
-            />
-          </div>
-          <div className="mt-3 flex max-h-64 flex-col gap-1 overflow-y-auto">
-            {modelsQuery.isPending ? (
-              <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-                <LoaderCircle size={13} className="animate-spin" />
-                Loading catalog…
-              </div>
-            ) : filteredModels.length === 0 ? (
-              <p className="px-2 py-3 text-xs text-muted-foreground">
-                No models match. Register one under Providers first.
-              </p>
-            ) : (
-              filteredModels.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setModel(m.id)}
-                  className={`flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                    effectiveModel === m.id
-                      ? "bg-foreground/10"
-                      : "hover:bg-foreground/5"
-                  }`}
-                >
-                  <span className="min-w-0 truncate font-mono text-xs text-foreground">
-                    {m.id}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    {m.favorite && (
-                      <span aria-label="Favorite">★</span>
-                    )}
-                    {m.custom && (
-                      <Badge tone="neutral" size="sm">
-                        Custom
-                      </Badge>
-                    )}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
+          <PlaygroundModelPicker
+            models={models}
+            isPending={modelsQuery.isPending}
+            effectiveModel={effectiveModel}
+            onSelect={setModel}
+          />
         </div>
 
         <div className="rounded-[var(--radius-panel)] border border-border bg-surface p-4">
