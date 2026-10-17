@@ -37,9 +37,9 @@ cd SRouter
 SROUTER_ADMIN_PASSWORD='pilih-yang-panjang' docker compose up -d
 ```
 
-Buka <http://localhost:3000>, masuk dengan password itu, sambungkan provider di halaman **Providers**, buat key di halaman **Keys**, lalu arahkan client ke `http://localhost:3000/v1`. Container menyajikan API dan dashboard di satu port, dan menyimpan database di volume `srouter-data` pada `/data`.
+Buka <http://localhost:3000>, masuk dengan password itu, sambungkan provider di halaman **Providers**, buat key di halaman **Keys**, lalu arahkan client ke `http://localhost:3000/v1`. Container menyajikan API dan dashboard di satu port, dan menyimpan database di `~/.srouter/srouter.db` (di-mount ke `/data`).
 
-Ganti port yang dipublikasikan dengan `SROUTER_PORT` (`SROUTER_PORT=8080 docker compose up -d`). Tanpa Compose: `docker build -t srouter .` lalu `docker run -p 3000:3000 -v srouter-data:/data -e SROUTER_ADMIN_PASSWORD=... srouter`.
+Ganti port yang dipublikasikan dengan `SROUTER_PORT` (`SROUTER_PORT=8080 docker compose up -d`). Tanpa Compose: `docker build -t srouter .` lalu `docker run -p 3000:3000 -v ~/.srouter:/data -e SROUTER_ADMIN_PASSWORD=... srouter`.
 
 ### Dari source
 

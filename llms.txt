@@ -30,7 +30,7 @@ Branch note: this file describes the tree on `feat/api-rust-migration` (PR #155)
 ## Run it
 
 - From source: `cargo run --manifest-path server/Cargo.toml` (stable Rust, edition 2024). Listens on `127.0.0.1:3000`, database at `~/.srouter/srouter.db`.
-- Docker: `SROUTER_ADMIN_PASSWORD=... docker compose up -d`. Serves API and dashboard on `:3000`, database on the `srouter-data` volume at `/data`.
+- Docker: `SROUTER_ADMIN_PASSWORD=... docker compose up -d`. Serves API and dashboard on `:3000`, database at `~/.srouter/srouter.db` (mounted to `/data`).
 - Dashboard only: `cd client && bun install && bun run dev` (Vite on `:5173`, proxies `/v1` to the server).
 
 ## API surface

@@ -37,9 +37,9 @@ cd SRouter
 SROUTER_ADMIN_PASSWORD='pick-something-long' docker compose up -d
 ```
 
-Open <http://localhost:3000>, sign in with that password, connect a provider on **Providers**, create a key on **Keys**, and point a client at `http://localhost:3000/v1`. The container serves the API and the dashboard on one port and keeps its database on the `srouter-data` volume at `/data`.
+Open <http://localhost:3000>, sign in with that password, connect a provider on **Providers**, create a key on **Keys**, and point a client at `http://localhost:3000/v1`. The container serves the API and the dashboard on one port and keeps its database at `~/.srouter/srouter.db` (mounted to `/data`).
 
-Change the published port with `SROUTER_PORT` (`SROUTER_PORT=8080 docker compose up -d`). Without Compose: `docker build -t srouter .` and then `docker run -p 3000:3000 -v srouter-data:/data -e SROUTER_ADMIN_PASSWORD=... srouter`.
+Change the published port with `SROUTER_PORT` (`SROUTER_PORT=8080 docker compose up -d`). Without Compose: `docker build -t srouter .` and then `docker run -p 3000:3000 -v ~/.srouter:/data -e SROUTER_ADMIN_PASSWORD=... srouter`.
 
 ### From source
 

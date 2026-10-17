@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "${SROUTER_PORT:-3000}:3000"
+    # Match the host user so SQLite has write permissions on the bind-mounted ~/.srouter directory
+    user: "${UID:-1000}:${GID:-1000}"
     environment:
       # config.rs derives srouter_dir from HOME, not from DATABASE_PATH, so the
       # importer's temp dirs and backups stay on the same volume as the database.
@@ -16,7 +18,4 @@ services:
       SROUTER_PUBLIC_URL: ${SROUTER_PUBLIC_URL:-}
       SROUTER_ADMIN_PASSWORD: ${SROUTER_ADMIN_PASSWORD:-}
     volumes:
-      - srouter-data:/data
-
-volumes:
-  srouter-data:
+      - ~/.srouter:/data
