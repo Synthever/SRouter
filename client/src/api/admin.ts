@@ -6,6 +6,7 @@ import type {
   AdminLoginInput,
   AdminSetupInput,
   AdminStatus,
+  ChangePasswordInput,
 } from "./types"
 
 /**
@@ -43,4 +44,16 @@ export function loginAdmin(input: AdminLoginInput) {
 /** `POST /v1/admin/logout` — 204; the server clears the session cookie. */
 export function logoutAdmin() {
   return request<void>("/v1/admin/logout", { method: "POST" })
+}
+
+/**
+ * `POST /v1/admin/change-password`. The current session survives the change;
+ * the other sessions do not, since the hash row is what they were validated
+ * against. The body type comes from Rust, like every other request shape.
+ */
+export function changeAdminPassword(input: ChangePasswordInput) {
+  return request<{ message: string }>("/v1/admin/change-password", {
+    method: "POST",
+    body: input,
+  })
 }

@@ -42,7 +42,34 @@ type RequestOptions = {
   method?: RequestMethod
   /** Serialised as JSON. Any body this app sends is an object, never a scalar. */
   body?: object
+  /**
+   * A multipart body. `Content-Type` stays unset on purpose: the browser has to
+   * write the boundary itself, and a manual header makes the server see a
+   * malformed request.
+   */
+  form?: FormData
   signal?: AbortSignal
+}
+
+/**
+ * The one place a failing response becomes an `APIError`; the JSON and the
+ * binary paths share it, so a `401` surfaces the same way on both.
+ */
+async function failure(response: Response): Promise<APIError> {
+  const text = await response.text()
+  let envelope: ErrorEnvelope | null = null
+  if (text.length > 0) {
+    try {
+      envelope = JSON.parse(text) as ErrorEnvelope
+    } catch {
+      // A non-JSON body means something answered that is not this API: a proxy
+      // error page, an HTML 404 from a misconfigured static host. Surface the
+      // status rather than a parse failure.
+      envelope = null
+    }
+  }
+
+  return new APIError(response.status, envelope?.error ?? null)
 }
 
 /**
@@ -58,16 +85,22 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, signal } = options
+  const { method = "GET", body, form, signal } = options
 
   const response = await fetch(path, {
     method,
     credentials: "include",
     signal,
     headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+      form === undefined && body !== undefined
+        ? { "Content-Type": "application/json" }
+        : undefined,
+    body: form ?? (body === undefined ? undefined : JSON.stringify(body)),
   })
+
+  if (!response.ok) {
+    throw await failure(response)
+  }
 
   if (response.status === 204) {
     return undefined as T
@@ -79,17 +112,29 @@ export async function request<T>(
     try {
       parsed = JSON.parse(text)
     } catch {
-      // A non-JSON body means something answered that is not this API: a proxy
-      // error page, an HTML 404 from a misconfigured static host. Surface the
-      // status rather than a parse failure.
+      // A 2xx that is not JSON is not this API's answer either.
       parsed = null
     }
   }
 
+  return parsed as T
+}
+
+/**
+ * A binary response. Beside `request<T>()` rather than folded into it because
+ * that path reads `text()`: a SQLite file would not survive the trip.
+ */
+export async function requestBlob(
+  path: string
+): Promise<{ blob: Blob; filename: string | null }> {
+  const response = await fetch(path, { credentials: "include" })
+
   if (!response.ok) {
-    const envelope = parsed as ErrorEnvelope | null
-    throw new APIError(response.status, envelope?.error ?? null)
+    throw await failure(response)
   }
 
-  return parsed as T
+  const disposition = response.headers.get("content-disposition")
+  const match = disposition?.match(/filename="?([^";]+)"?/)
+
+  return { blob: await response.blob(), filename: match?.[1] ?? null }
 }
