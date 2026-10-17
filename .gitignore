@@ -30,5 +30,5 @@ dist-ssr
 # (the TanStack convention) so a fresh clone typechecks before any generation.
 client/.tanstack/
 .claude
-anti-slop/*
+.superpowers/
 .mcp.json

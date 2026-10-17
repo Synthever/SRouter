@@ -163,6 +163,20 @@
   html {
     @apply font-sans;
   }
+
+  /* Native number steppers break layout in compact controls (e.g. FloatingField)
+     and render inconsistently across engines. Both WebKit pseudo-elements and
+     Firefox's appearance reset are required. */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 /* View Transition: Symmetrical split from center seam (UIARC theme-switch split) */
@@ -189,7 +203,6 @@
     clip-path: inset(0 0 0 0);
   }
 }
-
 
 /* Orbit loop animations for background rings */
 @keyframes ring-orbit {
@@ -241,5 +254,3 @@
     animation: none !important;
   }
 }
-
-
