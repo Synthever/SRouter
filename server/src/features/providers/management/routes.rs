@@ -237,7 +237,16 @@ async fn delete_provider_connection(
     if !delete_connection(database, &connection_id).await? {
         return Err(connection_not_found(&connection_id));
     }
-    unregister_custom_provider(&state.providers, &connection_id);
+    if connection.category == "custom_provider" {
+        let root_id = if connection.provider_id.is_empty() {
+            &connection.id
+        } else {
+            &connection.provider_id
+        };
+        refresh_custom_provider(&state.providers, database, root_id).await?;
+    } else {
+        unregister_custom_provider(&state.providers, &connection_id);
+    }
 
     Ok(Json(serde_json::json!({
         "message": constants::providers::CONNECTION_DELETED

@@ -4,454 +4,416 @@
  *  the full secret is never stored, so it never appears here.
  */
 export type APIKeyResponse = {
-  id: string
-  key_prefix: string
-  name: string
-  enabled: boolean
-  rate_limit: number
-  quota_limit: number
-  usage_tokens: number
-  credit_limit: number | null
-  usage_cost: number | null
-  allowed_models: string[] | null
-  created_at: number
-}
+	id: string,
+	key_prefix: string,
+	name: string,
+	enabled: boolean,
+	rate_limit: number,
+	quota_limit: number,
+	usage_tokens: number,
+	credit_limit: number | null,
+	usage_cost: number | null,
+	allowed_models: string[] | null,
+	created_at: number,
+};
 
 /**
  *  Request body for `POST /v1/providers/{provider_id}/connections`. Deliberately
  *  omits `Debug` and `PartialEq` because it carries API keys.
  */
 export type AddProviderConnectionsInput = {
-  name?: string | null
-  api_keys: string[]
-  prefix?: string | null
-}
+	name?: string | null,
+	api_keys: string[],
+	prefix?: string | null,
+};
 
 /**
  *  The answer to `POST /v1/admin/setup` and `POST /v1/admin/login`. Both only
  *  succeed by setting the session cookie, so `authenticated` is always true.
  */
 export type AdminAuthResult = {
-  authenticated: boolean
-}
+	authenticated: boolean,
+};
 
 /**
  *  Fields accepted by `POST /v1/admin/login`, under the same no-`Debug` rule as
  *  `AdminSetupInput`.
  */
 export type AdminLoginInput = {
-  password: string
-}
+	password: string,
+};
 
 /**
  *  Fields accepted by `POST /v1/admin/setup`.
- *
+ * 
  *  Carries a password and therefore derives no `Debug`/`PartialEq`: a derive
  *  would make the secret printable from any log line that formats the struct.
  */
 export type AdminSetupInput = {
-  password: string
-  confirmation: string
-}
+	password: string,
+	confirmation: string,
+};
 
 /**
  *  `GET /v1/admin/status` — whether the install still needs its first admin
  *  and whether the caller holds a valid session cookie.
  */
 export type AdminStatus = {
-  setup_required: boolean
-  authenticated: boolean
-}
+	setup_required: boolean,
+	authenticated: boolean,
+};
 
 /**
  *  One time bucket of the analytics window. Missing buckets are zero-filled.
- *
+ * 
  *  Deliberate deviation from Node: this report serializes snake_case, matching
  *  the rest of the Rust `/v1/logs` surface, instead of Node's camelCase.
  */
 export type AnalyticsBucket = {
-  bucket_start: number
-  total_requests: number
-  success_requests: number
-  error_requests: number
-  avg_latency_ms: number | null
-  total_tokens: number
-  prompt_tokens: number
-  completion_tokens: number
-  cached_tokens: number
-}
+	bucket_start: number,
+	total_requests: number,
+	success_requests: number,
+	error_requests: number,
+	avg_latency_ms: number | null,
+	total_tokens: number,
+	prompt_tokens: number,
+	completion_tokens: number,
+	cached_tokens: number,
+};
 
 export type AnalyticsProviderSlice = {
-  provider_id: string
-  total_requests: number
-}
+	provider_id: string,
+	total_requests: number,
+};
 
 /**
  *  The `GET /v1/logs/analytics` report. Field names and semantics follow the
  *  Node `LogsLogic.getAnalytics` result, but snake_case rather than camelCase.
  */
 export type AnalyticsReport = {
-  object: string
-  window: string
-  bucket_size_ms: number
-  generated_at: number
-  requests_per_second: number | null
-  total_requests: number
-  error_rate: number | null
-  p95_latency_ms: number
-  /**
-   *  Estimated spend over the same window the buckets cover. The all-time
-   *  total lives in `GET /v1/logs/stats`; mixing the two in one KPI row would
-   *  label a lifetime figure with the selected window.
-   */
-  est_cost: number | null
-  buckets: AnalyticsBucket[]
-  top_models: AnalyticsTopModel[]
-  top_agents: AnalyticsTopAgent[]
-  providers: AnalyticsProviderSlice[]
-}
+	object: string,
+	window: string,
+	bucket_size_ms: number,
+	generated_at: number,
+	requests_per_second: number | null,
+	total_requests: number,
+	error_rate: number | null,
+	p95_latency_ms: number,
+	/**
+	 *  Estimated spend over the same window the buckets cover. The all-time
+	 *  total lives in `GET /v1/logs/stats`; mixing the two in one KPI row would
+	 *  label a lifetime figure with the selected window.
+	 */
+	est_cost: number | null,
+	buckets: AnalyticsBucket[],
+	top_models: AnalyticsTopModel[],
+	top_agents: AnalyticsTopAgent[],
+	providers: AnalyticsProviderSlice[],
+};
 
 export type AnalyticsTopAgent = {
-  agent: string
-  raw_user_agent: string
-  total_requests: number
-  total_tokens: number
-}
+	agent: string,
+	raw_user_agent: string,
+	total_requests: number,
+	total_tokens: number,
+};
 
 export type AnalyticsTopModel = {
-  model: string | null
-  /**
-   *  The provider the gateway actually routed these requests to, taken from
-   *  `request_logs.provider_id`. The client renders this column directly; it
-   *  must not infer a vendor from the model name, which guesses wrong for
-   *  every model whose name does not carry its vendor prefix.
-   */
-  provider_id: string
-  total_requests: number
-  total_tokens: number
-  /**
-   *  The prompt side of those tokens, which is the denominator of the cache
-   *  column: cached reads are a subset of it, while `total_tokens` also
-   *  carries the completion and would shrink the rate as answers lengthen.
-   */
-  prompt_tokens: number
-  /**
-   *  Prompt cache reads, so the table can report a hit rate for this window
-   *  instead of pairing a windowed request count with all-time tokens.
-   */
-  cached_tokens: number
-  est_cost: number | null
-}
+	model: string | null,
+	/**
+	 *  The provider the gateway actually routed these requests to, taken from
+	 *  `request_logs.provider_id`. The client renders this column directly; it
+	 *  must not infer a vendor from the model name, which guesses wrong for
+	 *  every model whose name does not carry its vendor prefix.
+	 */
+	provider_id: string,
+	total_requests: number,
+	total_tokens: number,
+	/**
+	 *  The prompt side of those tokens, which is the denominator of the cache
+	 *  column: cached reads are a subset of it, while `total_tokens` also
+	 *  carries the completion and would shrink the rate as answers lengthen.
+	 */
+	prompt_tokens: number,
+	/**
+	 *  Prompt cache reads, so the table can report a hit rate for this window
+	 *  instead of pairing a windowed request count with all-time tokens.
+	 */
+	cached_tokens: number,
+	est_cost: number | null,
+};
 
 export type ApiInfo = {
-  name: string
-  status: string
-  version: string
-  documentation: string
-}
+	name: string,
+	status: string,
+	version: string,
+	documentation: string,
+};
 
 /**
  *  A catalog entry: the OpenAI model fields plus the operator's favorite flag
  *  and the custom-model marker Node adds in `MergeCustomModels`.
  */
 export type CatalogModel = {
-  id: string
-  object: string
-  owned_by: string
-  favorite: boolean
-  custom?: boolean | null
-}
+	id: string,
+	object: string,
+	owned_by: string,
+	favorite: boolean,
+	custom?: boolean | null,
+};
 
 /**  `GET /v1/providers/catalog`. */
 export type CatalogResponse = {
-  total: number
-  categories: GroupedCatalog
-}
+	total: number,
+	categories: GroupedCatalog,
+};
 
 /**
  *  Fields accepted by `POST /v1/admin/change-password`. Same no-`Debug` rule:
  *  all three fields are secrets.
  */
 export type ChangePasswordInput = {
-  current_password: string
-  new_password: string
-  confirmation: string
-}
+	current_password: string,
+	new_password: string,
+	confirmation: string,
+};
 
 /**  Fields accepted by `POST /v1/keys`, mirroring `CreateAPIKeySchema`. */
 export type CreateAPIKeyInput = {
-  name: string
-  enabled?: boolean
-  rate_limit?: number
-  quota_limit?: number
-  credit_limit?: number | null
-  allowed_models?: string[] | null
-}
+	name: string,
+	enabled?: boolean,
+	rate_limit?: number,
+	quota_limit?: number,
+	credit_limit?: number | null,
+	allowed_models?: string[] | null,
+};
 
 /**
  *  Request body for `POST /v1/providers`. Derived for the TypeScript contract;
  *  deliberately omits `Debug` and `PartialEq` because it carries API keys.
  */
 export type CreateCustomProviderInput = {
-  name: string
-  prefix?: string | null
-  protocol: ProviderProtocol
-  base_url: string
-  api_key?: string | null
-  api_keys?: string[] | null
-}
+	name: string,
+	prefix?: string | null,
+	protocol: ProviderProtocol,
+	base_url: string,
+	api_key?: string | null,
+	api_keys?: string[] | null,
+};
 
 /**  Request body for `POST /v1/models`. */
 export type CreateModelInput = {
-  model_id: string
-  favorite?: boolean | null
-  hidden?: boolean | null
-}
+	model_id: string,
+	favorite?: boolean | null,
+	hidden?: boolean | null,
+};
 
 /**  Creation response: the management fields plus the one-time full secret. */
 export type CreatedAPIKeyResponse = {
-  key: string
-} & APIKeyResponse
+	key: string,
+} & APIKeyResponse;
 
 /**
  *  `POST /v1/admin/database/import`. A struct rather than a `json!` literal so
  *  the client imports the shape instead of declaring it; the JSON is unchanged.
  */
 export type DatabaseImportResponse = {
-  ok: boolean
-  backup_path: string
-  restart_required: boolean
-  reauth_required: boolean
-}
+	ok: boolean,
+	backup_path: string,
+	restart_required: boolean,
+	reauth_required: boolean,
+};
 
 /**  Response body for `DELETE /v1/models/{*model}`. */
 export type DeleteModelResponse = {
-  deleted: boolean
-}
+	deleted: boolean,
+};
 
 export type ErrorBody = {
-  message: string
-  type: string
-  code?: ErrorCode | null
-  param?: string | null
-}
+	message: string,
+	type: string,
+	code?: ErrorCode | null,
+	param?: string | null,
+};
 
 /**
  *  `error.code` values on the error envelope. Stable identifiers clients switch
  *  on, unlike the human-readable [`super::json`]/[`super::common`] messages.
- *
+ * 
  *  A closed value set rather than string constants, so the generated TypeScript
  *  is the union of codes this build can emit and a handler cannot invent one.
  */
-export type ErrorCode =
-  /**
-   *  Generic `400` code the Node error handler attaches to every
-   *  `HTTPException` at status 400 (`apps/api/src/index.ts:75-84`).
-   */
-  | "invalid_request"
-  /**  Request-body validation codes from the frozen `ChatCompletionRequestSchema`. */
-  | "invalid_type"
-  | "too_big"
-  | "too_small"
-  /**  Body and JSON parsing. */
-  | "invalid_json"
-  | "request_too_large"
-  | "invalid_payload"
-  /**  API-key authentication and accounting. */
-  | "invalid_api_key"
-  | "missing_api_key"
-  | "api_key_disabled"
-  | "insufficient_credit"
-  | "quota_exceeded"
-  | "model_not_allowed"
-  /**  Model catalog. */
-  | "model_not_found"
-  | "model_not_supported"
-  /**  Rate limiting. */
-  | "rate_limit_exceeded"
-  | "login_rate_limited"
-  /**  Admin authentication. */
-  | "authentication_required"
-  | "invalid_credentials"
-  | "invalid_password"
-  | "password_mismatch"
-  | "password_update_failed"
-  | "setup_local_only"
-  | "setup_already_complete"
-  /**  Cross-origin guard. */
-  | "csrf_origin_rejected"
-  /**  Gateway limits. */
-  | "context_length_exceeded"
-  /**  Upstream provider failure. */
-  | "upstream_unavailable"
-  /**
-   *  Database transfer (`docs/api-database-contract.md`). Frozen identifiers
-   *  the dashboard switches on; the messages live in [`super::database`].
-   */
-  | "unsupported_storage"
-  | "invalid_database"
-  | "invalid_multipart"
-  | "missing_database_file"
-  | "invalid_database_field"
-  | "upload_too_large"
-  | "database_import_busy"
-  | "database_recovery_failed"
-  | "database_transfer_failed"
+export type ErrorCode = 
+/**
+ *  Generic `400` code the Node error handler attaches to every
+ *  `HTTPException` at status 400 (`apps/api/src/index.ts:75-84`).
+ */
+"invalid_request" | 
+/**  Request-body validation codes from the frozen `ChatCompletionRequestSchema`. */
+"invalid_type" | "too_big" | "too_small" | 
+/**  Body and JSON parsing. */
+"invalid_json" | "request_too_large" | "invalid_payload" | 
+/**  API-key authentication and accounting. */
+"invalid_api_key" | "missing_api_key" | "api_key_disabled" | "insufficient_credit" | "quota_exceeded" | "model_not_allowed" | 
+/**  Model catalog. */
+"model_not_found" | "model_not_supported" | 
+/**  Rate limiting. */
+"rate_limit_exceeded" | "login_rate_limited" | 
+/**  Admin authentication. */
+"authentication_required" | "invalid_credentials" | "invalid_password" | "password_mismatch" | "password_update_failed" | "setup_local_only" | "setup_already_complete" | 
+/**  Cross-origin guard. */
+"csrf_origin_rejected" | 
+/**  Gateway limits. */
+"context_length_exceeded" | 
+/**  Upstream provider failure. */
+"upstream_unavailable" | 
+/**
+ *  Database transfer (`docs/api-database-contract.md`). Frozen identifiers
+ *  the dashboard switches on; the messages live in [`super::database`].
+ */
+"unsupported_storage" | "invalid_database" | "invalid_multipart" | "missing_database_file" | "invalid_database_field" | "upload_too_large" | "database_import_busy" | "database_recovery_failed" | "database_transfer_failed";
 
 export type ErrorEnvelope = {
-  error: ErrorBody
-}
+	error: ErrorBody,
+};
 
 /**  The four fixed provider groups. */
 export type GroupedCatalog = {
-  oauth: ProviderEntry[]
-  free_tier: ProviderEntry[]
-  api_key: ProviderEntry[]
-  custom_provider: ProviderEntry[]
-}
+	oauth: ProviderEntry[],
+	free_tier: ProviderEntry[],
+	api_key: ProviderEntry[],
+	custom_provider: ProviderEntry[],
+};
 
 /**
  *  Standard HTTP request methods.
- *
+ * 
  *  The wire and stored values are always one of the logged methods; a stored
  *  row that carries anything else parses to `Other` through [`FromStr`], which
  *  is where the tolerant fallback lives.
  */
-export type HTTPMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "HEAD"
-  | "OPTIONS"
-  | "CONNECT"
-  | "TRACE"
-  | "OTHER"
+export type HTTPMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE" | "OTHER";
 
 export type HealthResponse = {
-  status: string
-}
+	status: string,
+};
 
 export type KeyListResponse = {
-  object: string
-  data: APIKeyResponse[]
-}
+	object: string,
+	data: APIKeyResponse[],
+};
 
-export type LiveEvent =
-  | { type: "connected" }
-  | { type: "usage.updated"; stats: UsageStatsReport }
-  | { type: "request.logged"; log: RequestLog }
+export type LiveEvent = { type: "connected" } | { type: "usage.updated"; stats: UsageStatsReport } | { type: "request.logged"; log: RequestLog };
 
 /**  A specific rate-limit window or model quota entry. */
 export type LiveModelQuotaItem = {
-  name: string
-  used: number
-  limit: number
-  percentage: string
-  percentage_value: number
-  reset_in: string
-  reset_time?: string | null
-  status: "exhausted" | "warning" | "ok"
-}
+	name: string,
+	used: number,
+	limit: number,
+	percentage: string,
+	percentage_value: number,
+	reset_in: string,
+	reset_time?: string | null,
+	status: "exhausted" | "warning" | "ok",
+};
 
 /**  Client identification metadata for a logged request. */
 export type LogClient = {
-  ip_address?: string | null
-  user_agent?: string | null
-}
+	ip_address?: string | null,
+	user_agent?: string | null,
+};
 
 /**  Estimated cost breakdown formatted in fixed 4-decimal USD for a logged request. */
 export type LogCost = {
-  input?: string | null
-  output?: string | null
-  cache?: string | null
-  total?: string | null
-}
+	input?: string | null,
+	output?: string | null,
+	cache?: string | null,
+	total?: string | null,
+};
 
 /**  Error / diagnostics information for a failed request. */
 export type LogError = {
-  error_code?: string | null
-  error_message?: string | null
-}
+	error_code?: string | null,
+	error_message?: string | null,
+};
 
 /**  Token usage breakdown for a logged request. */
 export type LogTokenUsage = {
-  input?: number | null
-  output?: number | null
-  cache?: number | null
-  cache_read?: number | null
-  cache_creation?: number | null
-  reasoning?: number | null
-  total?: number | null
-}
+	input?: number | null,
+	output?: number | null,
+	cache?: number | null,
+	cache_read?: number | null,
+	cache_creation?: number | null,
+	reasoning?: number | null,
+	total?: number | null,
+};
 
 export type LogsResponse = {
-  object: ObjectKind
-  data: RequestLog[]
-  pagination?: Pagination | null
-}
+	object: ObjectKind,
+	data: RequestLog[],
+	pagination?: Pagination | null,
+};
 
 export type ModelListResponse = {
-  object: string
-  data: CatalogModel[]
-}
+	object: string,
+	data: CatalogModel[],
+};
 
 export type ModelPricingCost = {
-  input?: number | null
-  output?: number | null
-  cache_read?: number | null
-  cache_write?: number | null
-  reasoning?: number | null
-  input_audio?: number | null
-  output_audio?: number | null
-}
+	input?: number | null,
+	output?: number | null,
+	cache_read?: number | null,
+	cache_write?: number | null,
+	reasoning?: number | null,
+	input_audio?: number | null,
+	output_audio?: number | null,
+};
 
 export type ModelPricingItem = {
-  id: string
-  name: string
-  description: string
-  family?: string | null
-  provider: string
-  attachment: boolean
-  reasoning: boolean
-  tool_call: boolean
-  temperature?: boolean | null
-  structured_output?: boolean | null
-  open_weights: boolean
-  knowledge?: string | null
-  release_date: string
-  last_updated: string
-  cost?: ModelPricingCost | null
-  limit?: ModelPricingLimit | null
-  modalities?: ModelPricingModalities | null
-}
+	id: string,
+	name: string,
+	description: string,
+	family?: string | null,
+	provider: string,
+	attachment: boolean,
+	reasoning: boolean,
+	tool_call: boolean,
+	temperature?: boolean | null,
+	structured_output?: boolean | null,
+	open_weights: boolean,
+	knowledge?: string | null,
+	release_date: string,
+	last_updated: string,
+	cost?: ModelPricingCost | null,
+	limit?: ModelPricingLimit | null,
+	modalities?: ModelPricingModalities | null,
+};
 
 export type ModelPricingLimit = {
-  context?: number | null
-  output?: number | null
-}
+	context?: number | null,
+	output?: number | null,
+};
 
 export type ModelPricingModalities = {
-  input?: string[] | null
-  output?: string[] | null
-}
+	input?: string[] | null,
+	output?: string[] | null,
+};
 
-export type ObjectKind = "list" | "usage"
+export type ObjectKind = "list" | "usage";
 
 export type Pagination = {
-  page: number
-  limit: number
-  total: number
-  total_pages: number
-}
+	page: number,
+	limit: number,
+	total: number,
+	total_pages: number,
+};
 
 export type PricingListResponse = {
-  object: string
-  total: number
-  updated_at?: string | null
-  data: ModelPricingItem[]
-}
+	object: string,
+	total: number,
+	updated_at?: string | null,
+	data: ModelPricingItem[],
+};
 
 /**
  *  A connection as the detail response reports it. There is deliberately no
@@ -459,51 +421,51 @@ export type PricingListResponse = {
  *  prefix is reported as `prefix` (the row's `alias` column).
  */
 export type ProviderConnectionView = {
-  id: string
-  provider_id: string
-  name: string
-  prefix: string | null
-  category: string
-  protocol: string
-  base_url: string | null
-  enabled: boolean
-  created_at: number
-  /**
-   *  The account check verdict: `active` while the stored token has not
-   *  lapsed, `expired` once it has, `unstated` when the store states no expiry.
-   */
-  health: "active" | "expired" | "unstated"
-  /**  The connection that holds the same account, when another one does. */
-  duplicate_of?: string | null
-}
+	id: string,
+	provider_id: string,
+	name: string,
+	prefix: string | null,
+	category: string,
+	protocol: string,
+	base_url: string | null,
+	enabled: boolean,
+	created_at: number,
+	/**
+	 *  The account check verdict: `active` while the stored token has not
+	 *  lapsed, `expired` once it has, `unstated` when the store states no expiry.
+	 */
+	health: "active" | "expired" | "unstated",
+	/**  The connection that holds the same account, when another one does. */
+	duplicate_of?: string | null,
+};
 
 /**
  *  A provider as the list, catalog, and detail routes describe it. The id and
  *  name are owned strings because a custom provider's values come from its row.
  */
 export type ProviderEntry = {
-  id: string
-  name: string
-  prefix?: string | null
-  category: string
-  protocol: ProviderProtocol
-  default_base_url: string
-  requires_api_key: boolean
-  requires_oauth: boolean
-  supports_custom_url: boolean
-  enabled: boolean
-  /**  Whether requests rotate across this provider's accounts. */
-  round_robin: boolean
-  status: ProviderStatus
-  /**  Detail only; the list and catalog omit it like Node does. */
-  connections?: ProviderConnectionView[] | null
-  models: ProviderModel[]
-}
+	id: string,
+	name: string,
+	prefix?: string | null,
+	category: string,
+	protocol: ProviderProtocol,
+	default_base_url: string,
+	requires_api_key: boolean,
+	requires_oauth: boolean,
+	supports_custom_url: boolean,
+	enabled: boolean,
+	/**  Whether requests rotate across this provider's accounts. */
+	round_robin: boolean,
+	status: ProviderStatus,
+	/**  Detail only; the list and catalog omit it like Node does. */
+	connections?: ProviderConnectionView[] | null,
+	models: ProviderModel[],
+};
 
 export type ProviderListResponse = {
-  object: string
-  data: ProviderEntry[]
-}
+	object: string,
+	data: ProviderEntry[],
+};
 
 /**
  *  A model line in the detail response. Hidden and favorited models stay in the
@@ -511,103 +473,102 @@ export type ProviderListResponse = {
  *  drops them.
  */
 export type ProviderModel = {
-  id: string
-  object: string
-  owned_by: string
-  hidden: boolean
-  favorite: boolean
-  custom: boolean
-}
+	id: string,
+	object: string,
+	owned_by: string,
+	hidden: boolean,
+	favorite: boolean,
+	custom: boolean,
+};
 
 /**
  *  The wire protocol a provider speaks, as the catalog and the provider-auth
  *  responses report it.
- *
+ * 
  *  Three variants, matching what the build actually serves. Node's
  *  `ProviderProtocol` union also lists `gemini`, but that value is dead: its only
  *  user was the `gemini_cli` provider deleted with `packages/providers/src/catalog.ts`.
  */
-export type ProviderProtocol = "openai" | "anthropic" | "custom"
+export type ProviderProtocol = "openai" | "anthropic" | "custom";
 
 /**  An account's quota overview. */
 export type ProviderQuotaAccount = {
-  id: string
-  provider: string
-  account: string
-  enabled: boolean
-  quota_type: string
-  total_quotas?: number | null
-  quotas?: LiveModelQuotaItem[] | null
-  usage_metrics?: ProviderUsageMetric[] | null
-}
+	id: string,
+	provider: string,
+	account: string,
+	enabled: boolean,
+	quota_type: string,
+	total_quotas?: number | null,
+	quotas?: LiveModelQuotaItem[] | null,
+	usage_metrics?: ProviderUsageMetric[] | null,
+};
 
 /**  Connection state of a provider driver. */
 export type ProviderStatus = {
-  state: "connected" | "no_connections"
-  message: string
-  connected_count: number
-}
+	state: "connected" | "no_connections",
+	message: string,
+	connected_count: number,
+};
 
 /**
  *  One `usage_metrics` row: what a provider driver reports about a model's
  *  logged usage.
- *
+ * 
  *  No driver in this build fills it (`usage_metrics` is always `None`), but the
  *  shape is the one Node declares (`packages/types/src/quota.ts`,
  *  `ProviderUsageMetric`), so a client can read the field without a hole in its
  *  types.
  */
 export type ProviderUsageMetric = {
-  model: string
-  total_requests: number
-  total_tokens: number
-  prompt_tokens: number
-  completion_tokens: number
-  last_used_at: string | null
-}
+	model: string,
+	total_requests: number,
+	total_tokens: number,
+	prompt_tokens: number,
+	completion_tokens: number,
+	last_used_at: string | null,
+};
 
 /**  Top-level response for `GET /v1/quota` and `GET /v1/qouta`. */
 export type QuotaResponse = {
-  object: string
-  total_accounts: number
-  providers: ProviderQuotaAccount[]
-}
+	object: string,
+	total_accounts: number,
+	providers: ProviderQuotaAccount[],
+};
 
 /**
  *  A single request-log record. Categorized into cohesive domain structs
  *  while preserving the flat snake_case JSON wire representation.
  */
 export type RequestLog = {
-  id: string
-  request_id: string
-  user_id: string | null
-  api_key_id: string | null
-  method: HTTPMethod
-  path: string
-  status_code: number
-  latency_ms: number
-  created_at: number
-  provider: string | null
-  model: string | null
-  resolved_model: string | null
-  tokens: LogTokenUsage
-  costs?: LogCost | null
-} & LogClient &
-  LogError
+	id: string,
+	request_id: string,
+	user_id: string | null,
+	api_key_id: string | null,
+	method: HTTPMethod,
+	path: string,
+	status_code: number,
+	latency_ms: number,
+	created_at: number,
+	provider: string | null,
+	model: string | null,
+	resolved_model: string | null,
+	tokens: LogTokenUsage,
+	costs?: LogCost | null,
+} & LogClient & LogError;
 
 export type SettingsResponse = {
-  require_api_key: boolean
-}
+	require_api_key: boolean,
+};
 
 /**
  *  `GET /v1/admin/system`. The version is the crate's, so a rebuild is what
  *  changes it.
  */
 export type SystemResponse = {
-  version: string
-  database_path: string
-  schema_version: number
-}
+	version: string,
+	database_path: string,
+	schema_version: number,
+};
 
 /**
  *  Partial update accepted by `PATCH /v1/keys/:id`. Every field is optional;
@@ -615,13 +576,13 @@ export type SystemResponse = {
  *  (`None`) from an explicit clear (`Some(None)`).
  */
 export type UpdateAPIKeyInput = {
-  name?: string | null
-  enabled?: boolean | null
-  rate_limit?: number | null
-  quota_limit?: number | null
-  credit_limit?: number | null
-  allowed_models?: string[] | null
-}
+	name?: string | null,
+	enabled?: boolean | null,
+	rate_limit?: number | null,
+	quota_limit?: number | null,
+	credit_limit?: number | null,
+	allowed_models?: string[] | null,
+};
 
 /**
  *  Fields accepted by `PATCH`/`POST /v1/settings`, as the client builds them.
@@ -630,32 +591,32 @@ export type UpdateAPIKeyInput = {
  *  from the shape this same struct is parsed into.
  */
 export type UpdateSettingsInput = {
-  require_api_key?: boolean | null
-  /**
-   *  String-valued settings rows, mirroring Node's `UpdateSettingsSchema`
-   *  (`z.record(z.string())`). A `BTreeMap` keeps the write order stable.
-   */
-  settings?: { [key in string]: string } | null
-}
+	require_api_key?: boolean | null,
+	/**
+	 *  String-valued settings rows, mirroring Node's `UpdateSettingsSchema`
+	 *  (`z.record(z.string())`). A `BTreeMap` keeps the write order stable.
+	 */
+	settings?: { [key in string]: string } | null,
+};
 
 /**  One `by_model` entry of [`UsageStatsReport`]. */
 export type UsageByModel = {
-  model: string
-  total_requests: number
-  total_input_tokens: number
-  total_output_tokens: number
-  total_cached_tokens: number
-  est_cost: number | null
-}
+	model: string,
+	total_requests: number,
+	total_input_tokens: number,
+	total_output_tokens: number,
+	total_cached_tokens: number,
+	est_cost: number | null,
+};
 
 /**
  *  Cache tokens split by direction: `write` is what the provider had to store
  *  (`cache_creation_tokens`), `read` is what it served back (`cached_tokens`).
  */
 export type UsageCacheTokens = {
-  write: number
-  read: number
-}
+	write: number,
+	read: number,
+};
 
 /**
  *  The logged cost. Only the sum is stored per request, so `total` is the whole
@@ -663,43 +624,43 @@ export type UsageCacheTokens = {
  *  `estimated` flags that it is an estimate.
  */
 export type UsageCostTotals = {
-  total: number | null
-  label: string
-  estimated: boolean
-}
+	total: number | null,
+	label: string,
+	estimated: boolean,
+};
 
 export type UsageData = {
-  totals: UsageTotals
-  by_model: UsageByModel[]
-}
+	totals: UsageTotals,
+	by_model: UsageByModel[],
+};
 
 export type UsageRequestTotals = {
-  total: number
-  success: number
-  failed: number
-}
+	total: number,
+	success: number,
+	failed: number,
+};
 
 /**
  *  The all-time usage totals served by `GET /v1/logs/stats` and carried by the
  *  `usage.updated` event. The wire keys are snake_case, as documented in
  *  `docs/api-v1-contract.md`, "Logs in the Rust build".
- *
+ * 
  *  The counters are grouped instead of flat, so the report reads as
  *  `{ object, data: { totals, by_model } }` rather than a dozen loose numbers
  *  sitting beside the discriminator.
  */
 export type UsageStatsReport = {
-  object: ObjectKind
-  data: UsageData
-}
+	object: ObjectKind,
+	data: UsageData,
+};
 
 export type UsageTokenTotals = {
-  input: number
-  output: number
-  total: number
-  reasoning: number
-  cache: UsageCacheTokens
-}
+	input: number,
+	output: number,
+	total: number,
+	reasoning: number,
+	cache: UsageCacheTokens,
+};
 
 /**
  *  Every counter [`UsageStatsReport`] aggregates over the request log, grouped by
@@ -707,54 +668,54 @@ export type UsageTokenTotals = {
  *  because the field it lives under already says it.
  */
 export type UsageTotals = {
-  requests: UsageRequestTotals
-  tokens: UsageTokenTotals
-  cost: UsageCostTotals
-}
+	requests: UsageRequestTotals,
+	tokens: UsageTokenTotals,
+	cost: UsageCostTotals,
+};
 
 /**  The verification response, mirroring Node's `VerifyConnection`. */
 export type VerifyResponse = {
-  success: boolean
-  message: string
-  models_count?: number | null
-  connection_id?: string | null
-}
+	success: boolean,
+	message: string,
+	models_count?: number | null,
+	connection_id?: string | null,
+};
 
 export const ErrorCode = {
-  invalid_request: "invalid_request",
-  invalid_type: "invalid_type",
-  too_big: "too_big",
-  too_small: "too_small",
-  invalid_json: "invalid_json",
-  request_too_large: "request_too_large",
-  invalid_payload: "invalid_payload",
-  invalid_api_key: "invalid_api_key",
-  missing_api_key: "missing_api_key",
-  api_key_disabled: "api_key_disabled",
-  insufficient_credit: "insufficient_credit",
-  quota_exceeded: "quota_exceeded",
-  model_not_allowed: "model_not_allowed",
-  model_not_found: "model_not_found",
-  model_not_supported: "model_not_supported",
-  rate_limit_exceeded: "rate_limit_exceeded",
-  login_rate_limited: "login_rate_limited",
-  authentication_required: "authentication_required",
-  invalid_credentials: "invalid_credentials",
-  invalid_password: "invalid_password",
-  password_mismatch: "password_mismatch",
-  password_update_failed: "password_update_failed",
-  setup_local_only: "setup_local_only",
-  setup_already_complete: "setup_already_complete",
-  csrf_origin_rejected: "csrf_origin_rejected",
-  context_length_exceeded: "context_length_exceeded",
-  upstream_unavailable: "upstream_unavailable",
-  unsupported_storage: "unsupported_storage",
-  invalid_database: "invalid_database",
-  invalid_multipart: "invalid_multipart",
-  missing_database_file: "missing_database_file",
-  invalid_database_field: "invalid_database_field",
-  upload_too_large: "upload_too_large",
-  database_import_busy: "database_import_busy",
-  database_recovery_failed: "database_recovery_failed",
-  database_transfer_failed: "database_transfer_failed",
-} as const satisfies Record<ErrorCode, ErrorCode>
+	invalid_request: "invalid_request",
+	invalid_type: "invalid_type",
+	too_big: "too_big",
+	too_small: "too_small",
+	invalid_json: "invalid_json",
+	request_too_large: "request_too_large",
+	invalid_payload: "invalid_payload",
+	invalid_api_key: "invalid_api_key",
+	missing_api_key: "missing_api_key",
+	api_key_disabled: "api_key_disabled",
+	insufficient_credit: "insufficient_credit",
+	quota_exceeded: "quota_exceeded",
+	model_not_allowed: "model_not_allowed",
+	model_not_found: "model_not_found",
+	model_not_supported: "model_not_supported",
+	rate_limit_exceeded: "rate_limit_exceeded",
+	login_rate_limited: "login_rate_limited",
+	authentication_required: "authentication_required",
+	invalid_credentials: "invalid_credentials",
+	invalid_password: "invalid_password",
+	password_mismatch: "password_mismatch",
+	password_update_failed: "password_update_failed",
+	setup_local_only: "setup_local_only",
+	setup_already_complete: "setup_already_complete",
+	csrf_origin_rejected: "csrf_origin_rejected",
+	context_length_exceeded: "context_length_exceeded",
+	upstream_unavailable: "upstream_unavailable",
+	unsupported_storage: "unsupported_storage",
+	invalid_database: "invalid_database",
+	invalid_multipart: "invalid_multipart",
+	missing_database_file: "missing_database_file",
+	invalid_database_field: "invalid_database_field",
+	upload_too_large: "upload_too_large",
+	database_import_busy: "database_import_busy",
+	database_recovery_failed: "database_recovery_failed",
+	database_transfer_failed: "database_transfer_failed",
+} as const satisfies Record<ErrorCode, ErrorCode>;

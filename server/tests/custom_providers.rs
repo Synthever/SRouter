@@ -610,6 +610,18 @@ async fn appends_bulk_connections_flags_duplicate_keys_and_promotes_root_on_dele
         "duplicate API key is flagged via SHA-256 account identity"
     );
 
+    let model_id = "pool/promotion-canary";
+    let registered = app
+        .clone()
+        .oneshot(admin_request(
+            "POST",
+            "/v1/models",
+            serde_json::json!({ "model_id": model_id }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+
     // Deleting the root connection row promotes a child connection so the custom
     // provider remains intact with the remaining 2 keys.
     let deleted_root = app
@@ -637,6 +649,14 @@ async fn appends_bulk_connections_flags_duplicate_keys_and_promotes_root_on_dele
     let after = json(after).await;
     assert_eq!(after["status"]["connected_count"], 2);
     assert_eq!(after["connections"].as_array().unwrap().len(), 2);
+    assert!(
+        after["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|model| model["id"] == model_id),
+        "promoting a key keeps the custom provider registered without a restart"
+    );
 }
 
 #[tokio::test]
