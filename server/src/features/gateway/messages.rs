@@ -363,7 +363,7 @@ async fn run_anthropic_streaming_interception_loop(
         // row carries the failure status with zero usage, and `log_request`
         // releases any reservation instead of settling it. No `message_stop`
         // follows the error event — Node closes right after it.
-        if let Some((status, message, _stream_code)) = stream_failure.take() {
+        if let Some((status, message, stream_code)) = stream_failure.take() {
             log_request(
                 &state,
                 &context,
@@ -374,7 +374,7 @@ async fn run_anthropic_streaming_interception_loop(
                 &UsageBreakdown::default(),
                 Some(&LogError::Stream {
                     message: &message,
-                    code: None,
+                    code: stream_code.as_deref(),
                 }),
             )
             .await;
