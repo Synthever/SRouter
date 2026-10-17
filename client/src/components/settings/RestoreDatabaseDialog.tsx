@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import type { FormEvent } from "react"
 
 import { MAX_UPLOAD_BYTES, importDatabase } from "@/api/database"
@@ -11,8 +11,8 @@ import {
   DialogClose,
   DialogContent,
 } from "@/components/arc/dialog/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { FileUpload } from "@/components/arc/file-upload/file-upload"
+import type { FileUploadItem } from "@/components/arc/file-upload/file-upload"
 import useMediaQuery from "@/hooks/useMediaQuery"
 
 type RestoreDatabaseDialogProps = {
@@ -29,15 +29,19 @@ export function RestoreDatabaseDialog({
   open,
   onOpenChange,
 }: RestoreDatabaseDialogProps) {
-  const id = useId()
   const isMobile = useMediaQuery("(max-width: 639px)")
-  const [file, setFile] = useState<File | null>(null)
+  const [picked, setPicked] = useState<FileUploadItem[]>([])
   const [failure, setFailure] = useState<string | null>(null)
   const formRef = useRef<HTMLFormElement | null>(null)
   const submitRef = useRef<HTMLButtonElement | null>(null)
 
-  const oversize = file !== null && file.size > MAX_UPLOAD_BYTES
+  // The picker keeps a refused file in its list so it can explain itself, so
+  // only a file that cleared its own type and size check may arm the button.
+  const file =
+    picked[0] !== undefined && !picked[0].error ? picked[0].file : null
 
+  // Enter inside a field submits the form, and the button also carries the
+  // action: forward the keyboard submit to the button so one press runs it once.
   function preventSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const submitter = (event.nativeEvent as SubmitEvent)?.submitter
@@ -46,7 +50,7 @@ export function RestoreDatabaseDialog({
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
-      setFile(null)
+      setPicked([])
       setFailure(null)
     }
     onOpenChange(nextOpen)
@@ -55,9 +59,6 @@ export function RestoreDatabaseDialog({
   async function handleRestore() {
     if (file === null) {
       throw new Error("Pick a database file first.")
-    }
-    if (oversize) {
-      throw new Error("That file is larger than 25 MB.")
     }
 
     try {
@@ -90,31 +91,15 @@ export function RestoreDatabaseDialog({
         your session.
       </Alert>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-file`}>Database file</Label>
-        <Input
-          id={`${id}-file`}
-          type="file"
-          accept=".db,application/octet-stream"
-          aria-describedby={`${id}-file-hint`}
-          aria-invalid={oversize ? true : undefined}
-          onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
-        />
-        {/* One sentence under the field: the chosen file, the cap, or the
-            oversize refusal, never three lines of grey text. */}
-        <span
-          id={`${id}-file-hint`}
-          className={
-            oversize ? "text-xs text-danger" : "text-xs text-muted-foreground"
-          }
-        >
-          {oversize
-            ? "Larger than 25 MB. Export a fresh snapshot and try that file."
-            : file === null
-              ? "A .db file exported from this gateway, up to 25 MB."
-              : `${file.name}, ${(file.size / 1024 / 1024).toFixed(1)} MB`}
-        </span>
-      </div>
+      <FileUpload
+        accept=".db,application/octet-stream"
+        multiple={false}
+        maxSize={MAX_UPLOAD_BYTES}
+        label="Database file"
+        description="A .db file exported from this gateway, up to 25 MB."
+        value={picked}
+        onChange={setPicked}
+      />
 
       {failure !== null ? (
         <Alert tone="danger" title="Could not restore the database">
@@ -146,7 +131,7 @@ export function RestoreDatabaseDialog({
           pendingLabel="Restoring database"
           successLabel="Restored"
           onAction={handleRestore}
-          disabled={file === null || oversize}
+          disabled={file === null}
           className="w-full sm:w-auto"
         />
       </div>
