@@ -92,7 +92,7 @@ export function RestoreDatabaseDialog({
       </Alert>
 
       <FileUpload
-        accept=".db,application/octet-stream"
+        accept=".db"
         multiple={false}
         maxSize={MAX_UPLOAD_BYTES}
         label="Database file"

@@ -105,6 +105,9 @@ export function ChangePasswordDialog({
         label="New password"
         autoComplete="new-password"
         required
+        // The server refuses more than 128 characters; stopping the field there
+        // keeps the refusal from arriving as a round trip.
+        maxLength={128}
         value={next}
         onChange={(event) => setNext(event.currentTarget.value)}
       />
@@ -114,6 +117,7 @@ export function ChangePasswordDialog({
         label="Confirm new password"
         autoComplete="new-password"
         required
+        maxLength={128}
         aria-invalid={mismatch ? true : undefined}
         description={mismatch ? "Passwords must match." : undefined}
         value={confirmation}
