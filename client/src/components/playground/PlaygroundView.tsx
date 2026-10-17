@@ -278,7 +278,7 @@ export function PlaygroundView() {
   const isStreaming = streamingModel !== null
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:flex-row lg:gap-6">
+    <div className="flex min-h-0 flex-col gap-5 lg:h-full lg:flex-row lg:gap-6">
       {/* Conversation column */}
       <div className="flex min-h-[60vh] flex-1 flex-col gap-3 lg:min-h-0">
         <div className="flex items-center justify-between gap-2">
@@ -369,7 +369,7 @@ export function PlaygroundView() {
       </div>
 
       {/* Settings column */}
-      <div className="flex w-full shrink-0 flex-col gap-4 lg:w-80">
+      <div className="flex w-full shrink-0 flex-col gap-4 lg:w-80 lg:overflow-y-auto">
         <div className="rounded-[var(--radius-panel)] border border-border bg-surface p-4">
           <div className="flex items-center gap-2">
             <FlaskConical size={14} className="text-muted-foreground" />

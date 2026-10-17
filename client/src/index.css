@@ -164,6 +164,19 @@
     @apply font-sans;
   }
 
+  /* Chrome, Edge, Safari */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  /* Firefox */
+  html {
+    scrollbar-width: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+
   /* Native number steppers break layout in compact controls (e.g. FloatingField)
      and render inconsistently across engines. Both WebKit pseudo-elements and
      Firefox's appearance reset are required. */
