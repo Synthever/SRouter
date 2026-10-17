@@ -1,0 +1,16 @@
+# The context is sent to the daemon before the build starts. `server/target` is
+# 14 GB and `client/node_modules` 557 MB; without these two lines every build
+# transfers them first.
+server/target
+client/node_modules
+client/dist
+
+# Nothing below is compile-time input for either stage.
+.git
+.github
+.superpowers
+.freebuff
+server/logs
+logs
+.env
+*.log
