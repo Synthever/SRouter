@@ -1,22 +1,49 @@
 # SRouter
 
-A self-hosted LLM gateway that speaks both the OpenAI and the Anthropic API. You run it on your own machine, connect the provider accounts you already pay for, and point every tool at one endpoint instead of juggling one key per provider.
+**One self-hosted endpoint for the LLM accounts you already pay for.** SRouter is an LLM gateway that speaks both the OpenAI and the Anthropic API, so Claude Code, Cursor, Cline, the OpenAI SDKs, and anything else expecting one of those shapes can point at a single base URL instead of juggling a key per provider.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust: edition 2024](https://img.shields.io/badge/rust-edition%202024-dea584.svg)](server/Cargo.toml)
+[![Storage: SQLite](https://img.shields.io/badge/storage-SQLite-003b57.svg)](server/migrations)
 
 **English** · [Bahasa Indonesia](README-id.md)
 
-## What it does
+[Why SRouter](#why-srouter) · [Quick start](#quick-start) · [Connect a client](#connect-a-client) · [Providers](#providers) · [Configuration](#configuration) · [API](#api) · [Dashboard](#dashboard) · [Architecture](#architecture) · [Development](#development) · [Deployment](#deployment) · [Troubleshooting](#troubleshooting) · [Security](#security) · [Benchmarks](#benchmarks) · [Project status](#project-status) · [License](#license)
 
-- One endpoint for OpenAI-style (`/v1/chat/completions`) and Anthropic-style (`/v1/messages`) clients. Streaming and tool calls pass through as SSE.
-- Providers include OpenCode Zen (free tier), Qoder, Cline, Grok Web, OpenAI Codex, CodeBuddy (global and CN), Google Antigravity, and Claude Code. Each one keeps its own driver: OAuth flow, token refresh, protocol translation.
-- Model ids are `provider/model`, so `antigravity/gemini-3.7-flash-high` routes through the Antigravity driver. A bare model id works when exactly one provider advertises it.
-- Custom OpenAI-compatible endpoints can be registered and verified from the API.
-- Gateway API keys (`sr-live-...`) are separate from provider credentials. Each key carries its own rate-limit window, token quota, credit limit, and enable flag; the store keeps a sha256 hash and a display prefix, never the secret.
-- Every request is logged to SQLite with provider, model, token counts, latency, status, and estimated cost. Prompt and completion text are not recorded.
-- A React dashboard ships in `client/` for the admin session: login and first-run setup work, the rest of the screens are still being built (see [Current state](#current-state)).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmark-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/benchmark-light.png">
+  <img alt="Three-panel chart comparing the gateways on one host: 8,675 vs 525 vs 354 requests per second at concurrency 50, 15 vs 131 vs 424 MB idle memory, and 5.5 vs 86.4 vs 123.1 ms median latency." src="assets/benchmark-light.png" width="100%">
+</picture>
 
-## Run it
+One host, one load generator, three gateways. Method, caveats, and the table are in [Benchmarks](#benchmarks).
 
-Requires a Rust toolchain (edition 2024, so 1.85 or newer; `server/rust-toolchain.toml` pins the channel).
+
+## Why SRouter
+
+- **One endpoint, two protocols.** `/v1/chat/completions` for OpenAI-shaped clients and `/v1/messages` for Anthropic-shaped ones. Streaming, tool calls, and images pass through; a provider failure mid-stream arrives as an SSE error event instead of a dropped connection.
+- **The accounts you already have.** Nine drivers cover OpenCode Zen (free tier), Qoder, Cline, Grok Web, OpenAI Codex, CodeBuddy (global and CN), Google Antigravity, and Claude Code. Each keeps its own OAuth flow, token refresh, and protocol translation.
+- **Keys that belong to the gateway.** Gateway keys (`sr-live-…`) are separate from provider credentials and carry their own rate-limit window, token quota, credit limit, model allowlist, and enable flag. Only a sha256 hash and a display prefix are stored, so a lost key is replaced, never recovered.
+- **You can see what happened.** Every request is logged to SQLite with provider, model, token counts, latency, status, and estimated cost, and the dashboard charts them live over SSE. Prompt and completion text are never recorded.
+- **One binary, one file, no services.** Rust/Axum server, SQLite storage, no Postgres, no Redis, no queue. `docker compose up -d` is the whole install.
+
+## Quick start
+
+### Docker
+
+```bash
+git clone https://github.com/seaavey/SRouter.git
+cd SRouter
+SROUTER_ADMIN_PASSWORD='pick-something-long' docker compose up -d
+```
+
+Open <http://localhost:3000>, sign in with that password, connect a provider on **Providers**, create a key on **Keys**, and point a client at `http://localhost:3000/v1`. The container serves the API and the dashboard on one port and keeps its database on the `srouter-data` volume at `/data`.
+
+Change the published port with `SROUTER_PORT` (`SROUTER_PORT=8080 docker compose up -d`). Without Compose: `docker build -t srouter .` and then `docker run -p 3000:3000 -v srouter-data:/data -e SROUTER_ADMIN_PASSWORD=... srouter`.
+
+### From source
+
+Requires a stable Rust toolchain (edition 2024, so 1.85 or newer; `server/rust-toolchain.toml` pins the channel).
 
 ```bash
 git clone https://github.com/seaavey/SRouter.git
@@ -24,48 +51,39 @@ cd SRouter
 cargo run --manifest-path server/Cargo.toml
 ```
 
-The server listens on `http://127.0.0.1:3000`, keeps its SQLite database at `~/.srouter/srouter.db`, and prints its log to stdout. `server/.env.example` lists every environment variable it reads; the ones worth knowing on day one:
-
-| Variable                 | Default                 | Purpose                                                                            |
-| ------------------------ | ----------------------- | ---------------------------------------------------------------------------------- |
-| `PORT`                   | `3000`                  | HTTP listener                                                                      |
-| `DATABASE_PATH`          | `~/.srouter/srouter.db` | SQLite file                                                                        |
-| `SROUTER_ADMIN_PASSWORD` | unset                   | Creates the admin account on boot, and resets its password on every boot while set |
-| `WEB_DIST_PATH`          | unset                   | Built dashboard to serve at `/`                                                    |
-
-Three things surprise people on the first run:
-
-- `dotenvy` reads `.env` relative to the current working directory, so either start the server with cwd `server/` or export the variables yourself.
-- `WEB_DIST_PATH` is a path to a build you produced, not a lookup. Build the dashboard with `bun run build` in `client/` and set `WEB_DIST_PATH=client/dist`, or leave it unset and `GET /` answers with the API info object. The path resolves against the working directory too.
-- PostgreSQL is refused at boot on purpose. SQLite is the only backend.
-
-The release binary is the same program:
+The server listens on <http://127.0.0.1:3000> and keeps its database at `~/.srouter/srouter.db`. To serve the dashboard from that same process, build it once and point `WEB_DIST_PATH` at the output:
 
 ```bash
-cargo build --release --manifest-path server/Cargo.toml
-cd server && ./target/release/srouter-server    # cwd server/ so .env applies
+cd client && bun install && bun run build && cd ..
+WEB_DIST_PATH=client/dist cargo run --manifest-path server/Cargo.toml
 ```
+
+### First run
+
+1. **Create the admin account.** Open `/login` in the dashboard, or `POST /v1/admin/setup`, which only answers loopback calls. Setting `SROUTER_ADMIN_PASSWORD` before boot does it too, and resets the password on every boot while it stays set.
+2. **Connect a provider.** Qoder, Cline, Codex, CodeBuddy, Antigravity, and Claude start an OAuth flow from the dashboard; Grok Web takes a cookie or SSO token; OpenCode Zen needs no account at all.
+3. **Create a gateway key.** The full secret (`sr-live-...`) is shown once, on creation.
+4. **Point a client at the gateway.** Base URL `http://127.0.0.1:3000/v1`, with the key in `Authorization: Bearer <key>` or `x-api-key: <key>`.
+
+Requests from loopback are allowed without a key until you turn on the `require_api_key` setting. Anything arriving over the network always needs one.
 
 ## Connect a client
 
-OpenAI SDK, pointed at the gateway:
+OpenAI SDK:
 
 ```python
 from openai import OpenAI
 
-client = OpenAI(
-    base_url="http://127.0.0.1:3000/v1",
-    api_key="sr-live-your-key",
-)
+client = OpenAI(base_url="http://127.0.0.1:3000/v1", api_key="sr-live-your-key")
 
 response = client.chat.completions.create(
-    model="antigravity/gemini-3.7-flash-high",
+    model="antigravity/gemini-3.8-flash-high",
     messages=[{"role": "user", "content": "Ping!"}],
     stream=True,
 )
 ```
 
-Anthropic SDK, same gateway, Anthropic shape:
+Anthropic SDK, same gateway:
 
 ```typescript
 import Anthropic from "@anthropic-ai/sdk";
@@ -82,49 +100,93 @@ const message = await client.messages.create({
 });
 ```
 
-curl works too:
+curl:
 
 ```bash
 curl -N http://127.0.0.1:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sr-live-your-key" \
-  -d '{
-    "model": "opencode_zen/big-pickle",
-    "messages": [{"role": "user", "content": "Ping!"}],
-    "stream": true
-  }'
+  -d '{"model": "opencode_zen/big-pickle", "messages": [{"role": "user", "content": "Ping!"}], "stream": true}'
 ```
 
-Requests from loopback are allowed without a key until you turn on the `require_api_key` setting. Anything that arrives over the network needs one, in either `Authorization: Bearer <key>` or `x-api-key: <key>`. Supported client headers include `anthropic-version`.
+Model ids are `provider/model`, so `antigravity/gemini-3.8-flash-high` resolves through the Antigravity driver. A bare id also works when exactly one provider advertises it. `GET /v1/models` tells you what is reachable right now, and `anthropic-version` is accepted on the Anthropic routes.
 
-## Auth and access
+## Providers
 
-- **Gateway keys** are created through `POST /v1/keys` (admin session required) and returned once. Only the hash and prefix are stored, so a lost key is replaced, not recovered.
-- **The admin session** is a seven-day `HttpOnly`, `SameSite=Lax` cookie, and the server checks `Origin` on mutations. Log in at `/login` in the dashboard, or through `POST /v1/admin/login`. The first admin is created with `POST /v1/admin/setup`, which only answers loopback calls, or by setting `SROUTER_ADMIN_PASSWORD` before the first boot.
-- **Provider credentials** live in the `providers` table inside the same SQLite file, in the clear. Treat that file like an `.env`: readable only by the service user, out of shared backups, moved with care when you move an export.
+| Driver         | Auth               | Catalog                                                                |
+| -------------- | ------------------ | ---------------------------------------------------------------------- |
+| `opencode_zen` | none               | static, with the FreeTier gate tools                                   |
+| `qoder`        | device flow        | live `model/list`, two advertised names per model                      |
+| `cline`        | WorkOS device flow | live `/api/v1/models`, connection-gated                                |
+| `grok-web`     | cookie / SSO       | connection-gated                                                       |
+| `codebuddy`    | OAuth              | official package `product.json` merged with the live enterprise config |
+| `codebuddy-cn` | OAuth              | same driver, CN endpoints                                              |
+| `antigravity`  | Google OAuth       | static 17-id CloudCode catalog                                         |
+| `claude`       | OAuth              | live `GET {base}/models` snapshot                                      |
+| `openai_codex` | ChatGPT OAuth      | live `GET /backend-api/codex/models`                                   |
+
+`GET /v1/providers/catalog` lists what is registered; `GET /v1/providers` lists the connections and their state. Custom OpenAI-compatible endpoints can be added, verified, and removed from the API or the dashboard.
+
+## Configuration
+
+Every setting is an environment variable, and [`server/.env.example`](server/.env.example) documents all of them. The ones worth knowing on day one:
+
+| Variable                                                           | Default                 | Purpose                                                                               |
+| ------------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------- |
+| `PORT`                                                             | `3000`                  | HTTP listener                                                                         |
+| `DATABASE_PATH`                                                    | `~/.srouter/srouter.db` | SQLite file (the Docker image uses `/data/srouter.db`)                                |
+| `WEB_DIST_PATH`                                                    | unset                   | Built dashboard to serve at `/`; unset means `GET /` answers with the API info object |
+| `SROUTER_ADMIN_PASSWORD`                                           | unset                   | Creates the admin account on boot, and resets its password on every boot while set    |
+| `SROUTER_PUBLIC_URL`                                               | unset                   | Canonical public origin; an `https://` value turns secure cookies on                  |
+| `SROUTER_CORS_ORIGINS`                                             | unset                   | Comma-separated origin allowlist (loopback origins are always allowed)                |
+| `SROUTER_SECURE_COOKIES`                                           | `false`                 | Adds `Secure` to the admin session cookie                                             |
+| `SROUTER_TRUST_CF_CONNECTING_IP`                                   | `false`                 | Trust `cf-connecting-ip`; only when a Cloudflare proxy is the sole caller             |
+| `SROUTER_UPSTREAM_CONCURRENCY`                                     | `100`                   | In-flight upstream cap; saturation answers `429` before any vendor call               |
+| `SROUTER_ACCESS_LOG`                                               | `off`                   | Per-request access log with redacted query, headers, and body                         |
+| `SROUTER_FILE_LOG`                                                 | `false`                 | Also write `logs/srouter-server.log` instead of stdout only                           |
+| `RUST_LOG`                                                         | `info`                  | Log level                                                                             |
+| `BRAVE_API_KEY`, `TAVILY_API_KEY`, `SERPER_API_KEY`, `SEARXNG_URL` | unset                   | Optional search backends for the built-in search tool                                 |
+
+`NODE_ENV` is not a switch: production is the only mode the binary boots, and `development` is refused. PostgreSQL is refused the same way: a configured `DATABASE_URL` stops the process at boot, because SQLite is the only backend with a schema.
 
 ## API
 
-| Method                        | Path                                                                                                                     | Guard                           | Purpose                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET`                         | `/v1`, `/health`                                                                                                         | none                            | API info and health check                                                            |
-| `POST`                        | `/v1/chat/completions`, `/v1/chat`, `/v1/chat/completion`                                                                | API key + rate limit            | OpenAI-compatible chat, streaming and not                                            |
-| `POST`                        | `/v1/messages`, `/v1/messages/count_tokens`                                                                              | API key + rate limit            | Anthropic-compatible messages and token counting                                     |
-| `POST`                        | `/v1/images/generations`                                                                                                 | API key + rate limit            | Image generation                                                                     |
-| `GET`                         | `/v1/models`, `/v1/models/{id}`, `/v1/providers`, `/v1/providers/catalog`, `/v1/logs`, `/v1/quota`, `/v1/models/pricing` | API key                         | Read surfaces: catalog, provider connections, request logs and stats, quota, pricing |
-| `GET`                         | `/v1/settings`                                                                                                           | API key                         | `require_api_key` and friends                                                        |
-| `POST` `PUT` `PATCH` `DELETE` | `/v1/models...`                                                                                                          | Admin session                   | Model writes                                                                         |
-| `POST` `PATCH` `DELETE`       | `/v1/providers...`                                                                                                       | Admin session                   | Custom endpoints, provider edits, round-robin weights                                |
-| `GET` `POST`                  | `/v1/auth/<provider>/...`                                                                                                | Admin session; callbacks public | OAuth login and callbacks                                                            |
-| `PATCH` `POST`                | `/v1/settings`                                                                                                           | Admin session                   | Settings writes                                                                      |
-| `GET` `POST` `PATCH` `DELETE` | `/v1/keys...`                                                                                                            | Admin session                   | Gateway API keys and their quotas                                                    |
-| `GET` `POST`                  | `/v1/admin/{status,setup,login,logout,change-password}`, `/v1/admin/database/{export,import}`                            | Per handler                     | Admin session and database transfer                                                  |
+| Method                        | Path                                                                                   | Guard                           | Purpose                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
+| `GET`                         | `/v1`, `/health`                                                                       | none                            | API info and health check                                    |
+| `POST`                        | `/v1/chat/completions`, `/v1/chat`, `/v1/chat/completion`                              | API key + rate limit            | OpenAI-compatible chat, streaming or buffered                |
+| `POST`                        | `/v1/messages`, `/v1/messages/count_tokens`                                            | API key + rate limit            | Anthropic-compatible messages and token counting             |
+| `POST`                        | `/v1/images/generations`                                                               | API key + rate limit            | Image generation                                             |
+| `GET`                         | `/v1/models`, `/v1/models/{*model}`                                                    | API key                         | Catalog with allowlist, favorites, and hidden models applied |
+| `GET`                         | `/v1/models/pricing`                                                                   | API key                         | models.dev pricing snapshot                                  |
+| `GET`                         | `/v1/quota` (alias `/v1/qouta`)                                                        | API key                         | Provider quota                                               |
+| `GET`                         | `/v1/logs`, `/v1/logs/{id}`, `/v1/logs/stats`, `/v1/logs/analytics`, `/v1/logs/events` | API key                         | Request logs, aggregates, and the SSE stream                 |
+| `GET`                         | `/v1/providers`, `/v1/providers/catalog`, `/v1/providers/{id}`                         | API key                         | Connections, catalog, and one provider                       |
+| `GET`                         | `/v1/settings`                                                                         | API key                         | `require_api_key`                                            |
+| `POST` `PUT` `PATCH` `DELETE` | `/v1/models/{*model}`                                                                  | Admin session                   | Model writes                                                 |
+| `PATCH`                       | `/v1/providers/{id}`, `/v1/providers/{id}/round-robin`                                 | Admin session                   | Provider edits and account rotation                          |
+| `POST` `DELETE`               | `/v1/providers`, `/v1/providers/verify`, `/v1/providers/connections/verify`            | Admin session                   | Custom providers and their verification                      |
+| `GET` `POST`                  | `/v1/auth/{qoder,cline,codebuddy,codebuddy-cn,grok-web,openai,antigravity,claude}/...` | Admin session; callbacks public | OAuth login and callbacks                                    |
+| `GET` `POST` `PATCH` `DELETE` | `/v1/keys`, `/v1/keys/{id}`, `/v1/keys/{id}/credit`                                    | Admin session                   | Gateway keys, quotas, and credit                             |
+| `POST` `PATCH`                | `/v1/settings`                                                                         | Admin session                   | Settings writes                                              |
+| `GET` `POST`                  | `/v1/admin/{status,setup,login,logout,change-password}`                                | Per handler                     | Admin session                                                |
+| `GET` `POST`                  | `/v1/admin/database/{export,import}`                                                   | Admin session                   | Database transfer                                            |
 
-The unlisted corners (the `/v1/v1/...` compatibility alias, the callback pages mounted at the root) and a guard-by-mount table live in `skills/srouter-server/references/http-layer.md`. Errors come back in the OpenAI envelope: `{"error": {"message", "type", "code", "param"}}`. A mid-stream provider failure arrives as an SSE error event, not a broken connection.
+Errors use the OpenAI envelope: `{"error": {"message", "type", "code", "param"}}`. The `/v1/v1/...` compatibility alias and the guard-by-mount table are documented in [`skills/srouter-server/references/http-layer.md`](skills/srouter-server/references/http-layer.md).
 
 ## Dashboard
 
-`client/` is a Bun + Vite + React 19 app. Today it has two screens, `/login` (sign-in and first-run setup) and `/` (a placeholder under the session gate), both backed by `/v1/admin/status`.
+`client/` is a Bun + Vite + React 19 app: TanStack Router and Query, Tailwind v4, shadcn on Base UI, plus a local `arc/` component kit.
+
+| Screen                                 | State                                                                              |
+| -------------------------------------- | ---------------------------------------------------------------------------------- |
+| `/login`                               | sign-in and first-run setup                                                        |
+| `/`                                    | overview: windowed analytics, live SSE events, model and provider breakdowns       |
+| `/providers`, `/providers/$providerId` | live: connection modals, health checks, duplicate detection                        |
+| `/logs`                                | live: paginated table, SSE tail, bottom-sheet request detail                       |
+| `/usage`                               | live: quota, per-model spend, period breakdown                                     |
+| `/keys`                                | live: create, edit, credit, model allowlist                                        |
+| `/settings`                            | static mockup: the admin-password and database-export buttons have no handlers yet |
 
 ```bash
 cd client
@@ -135,47 +197,94 @@ bun run typecheck
 bun run lint
 ```
 
-There is no test runner on the client side; `typecheck`, `lint`, and `build` are the checks.
+There is no client test runner; `typecheck`, `lint`, and `build` are the checks.
+
+## Architecture
+
+Two halves in one repository, sharing only generated TypeScript.
+
+| Path                   | What lives there                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `server/`              | Rust/Axum gateway: routes, middleware, provider drivers, SQLite stores, integration suites                           |
+| `client/`              | The operator dashboard                                                                                               |
+| `server/src/app.rs`    | The only router assembly; guards are applied per mount                                                               |
+| `server/src/features/` | One directory per feature: gateway, providers, catalog, logs, api_keys, admin_auth, provider_auth, database_transfer |
+| `server/migrations/`   | Schema history, currently version 4                                                                                  |
+| `server/tests/`        | Integration suites, each with its own temporary database and fake upstreams                                          |
+| `skills/`              | Deep-dive notes for server and client work                                                                           |
+
+A request goes router → per-mount guard → feature handler → model resolution → provider driver → upstream, and the answer streams back as SSE. Wire types derive `specta::Type` in Rust, and `cargo run --bin export_ts` renders them into `server/bindings.ts` and `client/src/generated/typed.ts`; a test fails when either copy drifts from a fresh render.
 
 ## Development
 
 ```bash
-cargo run --manifest-path server/Cargo.toml                              # run it
+cargo run --manifest-path server/Cargo.toml                              # run
 cargo test --manifest-path server/Cargo.toml --test chat_completions     # one suite
 cargo test --manifest-path server/Cargo.toml --locked                    # everything
 cargo fmt --manifest-path server/Cargo.toml -- --check
 cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
+cargo run --manifest-path server/Cargo.toml --bin export_ts              # regenerate bindings
 ```
 
-The server is one crate, no workspace and no DI container. `server/tests/` holds the integration suites, and each one builds its own temporary SQLite database and fake upstreams, so tests never touch your real data or reach a real provider. CI (`.github/workflows/ci.yml`) re-runs the suite, `fmt`, and `clippy` on pushes to `main` and pull requests into it, but run the suite yourself before you push.
+`make` wraps the same commands (`make check` is fmt + clippy + tests), plus `make image`, `make up`, and `make web`.
 
-Wire types are shared with the client through generated TypeScript. After touching a Rust type:
+Tests never touch your real database or a real provider: every suite builds a temporary SQLite file and fake upstreams. Two live probes (`opencode_live.rs`, `qoder_live.rs`) are network-gated and ignored by default; run them with `--ignored`. CI re-runs `fmt`, `clippy`, the suite, and the bindings-drift check on pushes to `main` and pull requests into it, but run the suite yourself before you push.
 
-```bash
-cargo run --manifest-path server/Cargo.toml --bin export_ts   # rewrites both committed copies
-```
+Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, ...); [`CONTRIBUTING.md`](CONTRIBUTING.md) has the details.
 
-`server/bindings.ts` and `client/src/generated/typed.ts` are generated files. Commit both; a test fails when either drifts from a fresh render.
+## Deployment
 
-For deeper material, `CONTRIBUTING.md` covers the build and commit conventions, `SECURITY.md` explains where credentials live and what counts as a vulnerability, and `skills/srouter-server/` documents the crate's architecture for debugging work.
+`Dockerfile` builds the server and the dashboard into one image on `gcr.io/distroless/cc-debian12:nonroot`, with `HOME=/data`, `DATABASE_PATH=/data/srouter.db`, and `WEB_DIST_PATH=/web`. `docker-compose.yml` runs that image as a single `srouter` service with a named volume.
 
-## Container
+- **Publish an image:** Actions -> `docker-publish` -> _Run workflow_. It is manual on purpose and never fires on a push or a tag.
+- **Back up:** `GET /v1/admin/database/export` (admin session) writes a portable copy, and `POST /v1/admin/database/import` restores one.
+- **Stop safely:** `docker compose down` stops the container and keeps the volume. `docker compose down -v` deletes the volume, which holds the SQLite database and therefore every provider credential.
+- **Upgrade:** pull the new image and restart. Migrations run on connect, and a schema newer than the binary understands is refused, so a downgrade needs the backup taken before the upgrade.
 
-`Dockerfile` builds the server and the dashboard into one image, and `docker-compose.yml` runs it with a named volume at `/data`. `Makefile` wraps the commands above so you do not have to retype the `--manifest-path` flags:
+## Troubleshooting
 
-```bash
-docker compose up -d        # builds the image, serves API + dashboard on :3000
-make                        # lists the wrapped build, test, and image targets
-```
+| Symptom                                         | Cause                                                                                                 |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /` returns JSON, not the dashboard         | `WEB_DIST_PATH` is unset, or points at a directory that does not exist                                |
+| `.env` seems ignored                            | `dotenvy` reads it from the current working directory; run with cwd `server/` or export the variables |
+| The process exits at boot mentioning PostgreSQL | `DATABASE_URL` is set; unset it and use `DATABASE_PATH`                                               |
+| `401` with `code=api_key_disabled`              | The key exists but is disabled; enable it from the dashboard or `PATCH /v1/keys/{id}`                 |
+| `429` on a request that used to work            | The key's rate-limit window, its token quota, or the `SROUTER_UPSTREAM_CONCURRENCY` cap               |
+| Locked out of the admin account                 | Boot once with `SROUTER_ADMIN_PASSWORD` set; it resets the password while it stays set                |
+| A provider connection drops after a while       | OAuth tokens refresh in the background; re-connect the account if the vendor revoked the grant        |
 
-Publishing the image is manual: Actions -> `docker-publish` -> "Run workflow", with no `push` or tag trigger, so it never fires on its own. `docker compose down -v` deletes the volume that holds the SQLite database and therefore every stored provider credential; use `docker compose down` when you only want to stop the container.
+## Security
 
-## Current state
+Provider credentials are stored in cleartext inside the SQLite file, so treat that file like a `.env`: readable only by the service user, and never in a shared backup. Gateway keys are stored as a sha256 hash plus a prefix and cannot be recovered. Request logs keep metadata only, with no prompt or completion text. To report a vulnerability, use the private channel in [`SECURITY.md`](SECURITY.md), not a public issue.
 
-The repository was stripped to the server crate and the dashboard in October 2026. Removed: the Node `apps/api` the Rust server was ported from, the seven `packages/*` workspace packages, the CLI, and the documentation site. The old code stays readable on the branches `backup/pre-packages-removal` and `backup/pre-apps-api-removal`.
+## Benchmarks
 
-What exists today is the server plus an early dashboard. No tagged release for the current crate version yet (the last tag, v0.1.8, belongs to the Node era).
+Three gateways, one host, same load generator, run one at a time: this server, `9router@0.5.104`, and `omniroute@3.8.51`. Each was measured on the cheapest route it exposes to an unauthenticated caller (`/health` here, `/api/health` for the two Node gateways), 20 seconds at concurrency 50, with RSS summed over the process tree.
+
+|                | SRouter        | 9Router            | OmniRoute          |
+| -------------- | -------------- | ------------------ | ------------------ |
+| Runtime        | Rust/Axum      | Next.js 16 on Node | Next.js on Node    |
+| Shipped size   | 25.4 MB binary | 76 MB npm package  | 2.8 GB npm package |
+| Cold start     | 0.06-0.12 s    | 3.1-3.5 s          | 9.3-12.5 s         |
+| Idle RSS       | 15-17 MB       | 131 MB             | 424 MB             |
+| RSS after load | 19-22 MB       | 487 MB             | 824 MB             |
+| Throughput     | 8,675 req/s    | 525 req/s          | 354 req/s          |
+| p50 / p95      | 5.5 / 8.5 ms   | 86 / 147 ms        | 123 / 206 ms       |
+
+Read this as gateway overhead, not chat speed: no provider credentials were configured for any of the three, so every request stops at the gateway and never reaches an upstream. The routes are also not identical work, since `/health` here returns a static body while the Node health routes pass through their web framework. The catalog row is the closer comparison: `/v1/models` answers in 785 bytes here against 317 KB (824 models) for 9Router, which falls to 5.2 req/s at concurrency 10 against 1,713 req/s here.
+
+Measured 2026-10-17 on one 4-vCPU host, sequentially, with a keep-alive Node generator at 50 workers for 20 s per run. The in-repo harness in `server/src/benchmark/` covers the gateway's own throughput on a mixed chat workload and is not what produced this table.
+
+## Project status
+
+The repository was stripped to the Rust server and the dashboard in October 2026: the Node `apps/api` the server was ported from, the seven `packages/*` workspace packages, the CLI, and the documentation site are gone. The old code stays readable on the branches `backup/pre-apps-api-removal` and `backup/pre-packages-removal`.
+
+The server implements the contract the Node API defined; the dashboard is still filling in screens (see [Dashboard](#dashboard)). There is no tagged release for the current crate yet: the last tag, `v0.1.8`, belongs to the Node era.
 
 ## License
 
 [MIT](LICENSE)
+
+---
+
+Working with an AI agent? [`llms.txt`](llms.txt) is a compact, machine-readable brief, [`AGENTS.md`](AGENTS.md) holds the contributor rules, and [`skills/`](skills/) has the deep dives.
