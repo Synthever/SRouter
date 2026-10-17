@@ -56,6 +56,24 @@ pub(crate) struct CatalogModel {
     custom: Option<bool>,
 }
 
+/// Request body for `POST /v1/models`.
+#[derive(Debug, Serialize, specta::Type)]
+pub struct CreateModelInput {
+    pub model_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub favorite: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub hidden: Option<bool>,
+}
+
+/// Response body for `DELETE /v1/models/{*model}`.
+#[derive(Debug, Serialize, specta::Type)]
+pub struct DeleteModelResponse {
+    pub deleted: bool,
+}
+
 impl CatalogModel {
     fn from_model(model: &ModelObject, favorites: &HashSet<String>, custom: bool) -> Self {
         Self {

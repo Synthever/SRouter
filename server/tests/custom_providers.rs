@@ -434,6 +434,7 @@ async fn the_detail_view_carries_the_registered_custom_model() {
     );
 
     let detail = app
+        .clone()
         .oneshot(with_loopback_client(
             Request::builder()
                 .method("GET")
@@ -444,6 +445,7 @@ async fn the_detail_view_carries_the_registered_custom_model() {
         .await
         .unwrap();
     let detail = json(detail).await;
+    assert_eq!(detail["prefix"], "mine");
     let listed = detail["models"]
         .as_array()
         .unwrap()
@@ -453,6 +455,188 @@ async fn the_detail_view_carries_the_registered_custom_model() {
         .expect("the detail view carries the custom model");
     assert_eq!(listed["hidden"], false);
     assert_eq!(listed["favorite"], false);
+    assert_eq!(listed["custom"], true);
+
+    // Deleting the custom model removes it from the detail view.
+    let deleted = app
+        .clone()
+        .oneshot(admin_request(
+            "DELETE",
+            "/v1/models/mine/gpt-x",
+            serde_json::json!(null),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert_eq!(json(deleted).await["deleted"], true);
+
+    let after_delete = app
+        .oneshot(with_loopback_client(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/providers/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    let after_delete = json(after_delete).await;
+    assert!(
+        !after_delete["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|model| model["id"] == "mine/gpt-x"),
+        "custom model removed from provider detail"
+    );
+}
+
+#[tokio::test]
+async fn creates_a_custom_provider_with_bulk_api_keys_as_one_provider() {
+    let database = TestDatabase::new().unwrap();
+    let app = app(&database).await;
+
+    let response = app
+        .clone()
+        .oneshot(admin_request(
+            "POST",
+            "/v1/providers",
+            serde_json::json!({
+                "name": "My Pool",
+                "prefix": "pool",
+                "protocol": "openai",
+                "base_url": PUBLIC_BASE_URL,
+                "api_keys": [
+                    "sk-alpha-1111",
+                    "sk-beta-2222",
+                    "sk-alpha-1111"
+                ]
+            }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let created = json(response).await;
+    let id = created["id"].as_str().expect("provider uuid").to_owned();
+    assert_eq!(created["status"]["connected_count"], 2);
+    assert_eq!(created["prefix"], "pool");
+
+    // Child connection rows must not leak as standalone custom providers in the catalog.
+    let catalog = app
+        .clone()
+        .oneshot(with_loopback_client(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/providers/catalog")
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    let catalog = json(catalog).await;
+    let customs = catalog["categories"]["custom_provider"].as_array().unwrap();
+    assert_eq!(customs.len(), 1, "exactly one custom provider in catalog");
+    assert_eq!(customs[0]["id"], id);
+    assert_eq!(customs[0]["status"]["connected_count"], 2);
+
+    // Detail view lists both connections with masked names and never exposes raw keys.
+    let detail = app
+        .oneshot(with_loopback_client(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/providers/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    let detail_json = json(detail).await;
+    let connections = detail_json["connections"].as_array().unwrap();
+    assert_eq!(connections.len(), 2);
+    let serialized = detail_json.to_string();
+    assert!(!serialized.contains("sk-alpha-1111"));
+    assert!(!serialized.contains("sk-beta-2222"));
+    assert!(serialized.contains("sk-...1111"));
+    assert!(serialized.contains("sk-...2222"));
+}
+
+#[tokio::test]
+async fn appends_bulk_connections_flags_duplicate_keys_and_promotes_root_on_delete() {
+    let database = TestDatabase::new().unwrap();
+    let app = app(&database).await;
+
+    let created = app
+        .clone()
+        .oneshot(admin_request(
+            "POST",
+            "/v1/providers",
+            serde_json::json!({
+                "name": "My Pool",
+                "prefix": "pool",
+                "protocol": "openai",
+                "base_url": PUBLIC_BASE_URL,
+                "api_key": "sk-first-0001"
+            }),
+        ))
+        .await
+        .unwrap();
+    let id = json(created).await["id"].as_str().unwrap().to_owned();
+
+    // Append two keys where one duplicates the existing key.
+    let appended = app
+        .clone()
+        .oneshot(admin_request(
+            "POST",
+            &format!("/v1/providers/{id}/connections"),
+            serde_json::json!({
+                "api_keys": [
+                    "sk-second-0002",
+                    "sk-first-0001"
+                ]
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(appended.status(), StatusCode::CREATED);
+    let body = json(appended).await;
+    assert_eq!(body["status"]["connected_count"], 3);
+    let connections = body["connections"].as_array().unwrap();
+    assert_eq!(connections.len(), 3);
+    assert!(
+        connections
+            .iter()
+            .any(|conn| conn["duplicate_of"].is_string()),
+        "duplicate API key is flagged via SHA-256 account identity"
+    );
+
+    // Deleting the root connection row promotes a child connection so the custom
+    // provider remains intact with the remaining 2 keys.
+    let deleted_root = app
+        .clone()
+        .oneshot(admin_request(
+            "DELETE",
+            &format!("/v1/providers/{id}/connections/{id}"),
+            serde_json::json!(null),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(deleted_root.status(), StatusCode::OK);
+
+    let after = app
+        .oneshot(with_loopback_client(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/providers/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(after.status(), StatusCode::OK);
+    let after = json(after).await;
+    assert_eq!(after["status"]["connected_count"], 2);
+    assert_eq!(after["connections"].as_array().unwrap().len(), 2);
 }
 
 #[tokio::test]

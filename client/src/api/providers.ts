@@ -2,13 +2,18 @@ import { queryOptions } from "@tanstack/react-query"
 
 import { request } from "./client"
 import type {
+  AddProviderConnectionsInput,
+  CatalogModel,
   CatalogResponse,
+  CreateCustomProviderInput,
+  CreateModelInput,
+  DeleteModelResponse,
   ProviderEntry,
   ProviderListResponse,
   VerifyResponse,
 } from "./types"
 
-export type AddCustomProviderInput = Parameters<typeof addCustomProvider>[0]
+export type AddCustomProviderInput = CreateCustomProviderInput
 
 /** `GET /v1/providers`. Complete provider list. */
 export const providersListQuery = queryOptions({
@@ -194,7 +199,10 @@ export function pollOAuthSession(providerID: string, state: string) {
 
 /** `POST /v1/providers/verify`. Probes an unsaved endpoint without storing it. */
 export function verifyCustomProvider(
-  body: Pick<AddCustomProviderInput, "protocol" | "base_url" | "api_key">
+  body: Pick<
+    CreateCustomProviderInput,
+    "protocol" | "base_url" | "api_key" | "api_keys"
+  >
 ) {
   return request<VerifyResponse>("/v1/providers/verify", {
     method: "POST",
@@ -203,17 +211,25 @@ export function verifyCustomProvider(
 }
 
 /** `POST /v1/providers`. Registers a custom provider endpoint. */
-export function addCustomProvider(body: {
-  name: string
-  prefix?: string
-  protocol: string
-  base_url: string
-  api_key?: string
-}) {
+export function addCustomProvider(body: CreateCustomProviderInput) {
   return request<ProviderEntry>("/v1/providers", {
     method: "POST",
     body,
   })
+}
+
+/** `POST /v1/providers/{provider_id}/connections`. Appends one or more API keys onto a custom provider. */
+export function addProviderConnections(
+  providerID: string,
+  body: AddProviderConnectionsInput
+) {
+  return request<ProviderEntry>(
+    `/v1/providers/${encodeURIComponent(providerID)}/connections`,
+    {
+      method: "POST",
+      body,
+    }
+  )
 }
 
 /** `DELETE /v1/providers/{provider_id}/connections/{connection_id}`. Removes one stored connection of a driver. */
@@ -225,4 +241,23 @@ export function deleteProviderConnection(
     `/v1/providers/${encodeURIComponent(providerID)}/connections/${encodeURIComponent(connectionID)}`,
     { method: "DELETE" }
   )
+}
+
+/** `POST /v1/models`. Registers a custom model under a provider prefix. */
+export function createCustomModel(body: CreateModelInput) {
+  return request<CatalogModel>("/v1/models", {
+    method: "POST",
+    body,
+  })
+}
+
+/** `DELETE /v1/models/{*model}`. Removes a custom model from the catalog. */
+export function deleteCustomModel(modelID: string) {
+  const encodedPath = modelID
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+  return request<DeleteModelResponse>(`/v1/models/${encodedPath}`, {
+    method: "DELETE",
+  })
 }

@@ -18,8 +18,9 @@ pub mod executor;
 pub mod registry;
 
 pub use crate::infrastructure::database::providers::{
-    CustomProviderRow, NewCustomProvider, create_custom_provider, delete_custom_provider,
-    find_custom_provider, list_custom_providers,
+    CustomProviderRow, NewCustomProvider, add_custom_provider_connections, create_custom_provider,
+    delete_custom_provider, find_custom_connection_row, find_custom_provider,
+    list_custom_providers,
 };
 pub use executor::{CustomProvider, ProviderShape, adapter, adapter_from_row};
 pub use registry::{

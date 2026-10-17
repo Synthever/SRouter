@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import { Check, LoaderCircle } from "lucide-react"
 import {
@@ -8,19 +8,30 @@ import {
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import type { ProviderProtocol } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
+import { Badge } from "@/components/arc/badge/badge"
 import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
 import { FloatingField } from "@/components/arc/floating-field/floating-field"
 import { RadioCards } from "@/components/arc/radio-cards/radio-cards"
+import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
 import {
   Dialog,
   DialogClose,
   DialogContent,
 } from "@/components/arc/dialog/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import useMediaQuery from "@/hooks/useMediaQuery"
 
-type CustomProviderForm = Required<AddCustomProviderInput> & {
+type KeyInputMode = "single" | "bulk"
+
+type CustomProviderForm = {
+  name: string
+  prefix: string
   protocol: ProviderProtocol
+  base_url: string
+  api_key: string
+  bulk_keys_raw: string
+  key_mode: KeyInputMode
 }
 
 type AddCustomProviderDialogProps = {
@@ -35,6 +46,35 @@ const INITIAL_FORM: CustomProviderForm = {
   protocol: "openai",
   base_url: "",
   api_key: "",
+  bulk_keys_raw: "",
+  key_mode: "single",
+}
+
+const KEY_MODE_OPTIONS = [
+  { value: "single", label: "Single key" },
+  { value: "bulk", label: "Bulk keys" },
+] satisfies { value: KeyInputMode; label: string }[]
+
+function parseBulkAPIKeys(raw: string): {
+  keys: string[]
+  duplicateCount: number
+} {
+  const seen = new Set<string>()
+  const keys: string[] = []
+  let duplicateCount = 0
+
+  for (const token of raw.split(/[\r\n,]+/)) {
+    const trimmed = token.trim()
+    if (!trimmed) continue
+    if (seen.has(trimmed)) {
+      duplicateCount += 1
+      continue
+    }
+    seen.add(trimmed)
+    keys.push(trimmed)
+  }
+
+  return { keys, duplicateCount }
 }
 
 /**
@@ -78,6 +118,7 @@ export function AddCustomProviderDialog({
   const formRef = useRef<HTMLFormElement | null>(null)
   const baseURLRef = useRef<HTMLInputElement | null>(null)
   const apiKeyRef = useRef<HTMLInputElement | null>(null)
+  const bulkKeysRef = useRef<HTMLTextAreaElement | null>(null)
   const submitButtonRef = useRef<HTMLButtonElement | null>(null)
   const verificationRun = useRef(0)
   const activeVerificationRun = useRef<number | null>(null)
@@ -86,6 +127,18 @@ export function AddCustomProviderDialog({
   >(null)
   const [addAttempted, setAddAttempted] = useState(false)
   const isMobile = useMediaQuery("(max-width: 639px)")
+
+  const bulkParsed = useMemo(
+    () => parseBulkAPIKeys(form.bulk_keys_raw),
+    [form.bulk_keys_raw]
+  )
+
+  const activeKeys =
+    form.key_mode === "bulk"
+      ? bulkParsed.keys
+      : form.api_key.trim()
+        ? [form.api_key.trim()]
+        : []
 
   function invalidateVerification() {
     activeVerificationRun.current = null
@@ -96,7 +149,13 @@ export function AddCustomProviderDialog({
 
   function updateForm(next: Partial<CustomProviderForm>) {
     setForm((current) => ({ ...current, ...next }))
-    if ("protocol" in next || "base_url" in next || "api_key" in next) {
+    if (
+      "protocol" in next ||
+      "base_url" in next ||
+      "api_key" in next ||
+      "bulk_keys_raw" in next ||
+      "key_mode" in next
+    ) {
       invalidateVerification()
     }
   }
@@ -115,22 +174,33 @@ export function AddCustomProviderDialog({
     return JSON.stringify({
       protocol: form.protocol,
       base_url: form.base_url.trim(),
-      api_key: form.api_key.trim(),
+      keys: activeKeys,
     })
   }
 
   async function handleVerify() {
-    const fields = [baseURLRef.current, apiKeyRef.current]
-    const firstInvalidField = fields.find(
-      (field) => field && !field.validity.valid
-    )
-    if (firstInvalidField) {
-      firstInvalidField.reportValidity()
+    if (baseURLRef.current && !baseURLRef.current.validity.valid) {
+      baseURLRef.current.reportValidity()
       toast.error("Check the required fields", {
         description: "Enter a valid base URL and API key before checking.",
       })
       throw verificationError(
         "Enter a valid base URL and API key before checking.",
+        verificationRun.current
+      )
+    }
+
+    if (activeKeys.length === 0) {
+      if (form.key_mode === "single") {
+        apiKeyRef.current?.reportValidity()
+      } else {
+        bulkKeysRef.current?.focus()
+      }
+      toast.error("Check the required fields", {
+        description: "Enter at least one valid API key before checking.",
+      })
+      throw verificationError(
+        "Enter at least one valid API key before checking.",
         verificationRun.current
       )
     }
@@ -145,7 +215,8 @@ export function AddCustomProviderDialog({
       const result = await verifyCustomProvider({
         protocol: form.protocol,
         base_url: form.base_url.trim(),
-        api_key: form.api_key.trim(),
+        api_key: activeKeys[0],
+        api_keys: form.key_mode === "bulk" ? activeKeys : undefined,
       })
       if (!result.success) throw new Error(result.message)
 
@@ -184,11 +255,17 @@ export function AddCustomProviderDialog({
     verifiedConfiguration === configurationKey() &&
     form.name.trim().length > 0 &&
     form.base_url.trim().length > 0 &&
-    form.api_key.trim().length > 0
+    activeKeys.length > 0
 
   function handleProtocolChange(value: string) {
     const protocol = PROTOCOLS.find((option) => option.value === value)
     if (protocol) updateForm({ protocol: protocol.value })
+  }
+
+  function handleKeyModeChange(value: string) {
+    if (value === "single" || value === "bulk") {
+      updateForm({ key_mode: value })
+    }
   }
 
   function preventSubmit(event: FormEvent<HTMLFormElement>) {
@@ -201,7 +278,7 @@ export function AddCustomProviderDialog({
 
   async function handleSubmit() {
     setAddAttempted(true)
-    if (!formRef.current?.reportValidity()) {
+    if (!formRef.current?.reportValidity() || activeKeys.length === 0) {
       toast.error("Complete the required fields", {
         description: "Add a provider name, valid base URL, and API key.",
       })
@@ -214,7 +291,8 @@ export function AddCustomProviderDialog({
         prefix: form.prefix.trim() || undefined,
         protocol: form.protocol,
         base_url: form.base_url.trim(),
-        api_key: form.api_key.trim(),
+        api_key: form.key_mode === "single" ? activeKeys[0] : undefined,
+        api_keys: form.key_mode === "bulk" ? activeKeys : undefined,
       })
       handleOpenChange(false)
     } catch (error) {
@@ -279,39 +357,93 @@ export function AddCustomProviderDialog({
         />
       </fieldset>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <FloatingField
-          ref={baseURLRef}
-          id="custom-provider-url"
-          label="Base URL"
-          requiredMark
-          type="url"
-          autoComplete="url"
-          monospace
-          value={form.base_url}
-          onChange={(event) =>
-            updateForm({ base_url: event.currentTarget.value })
-          }
-          placeholder="https://api.example.com/v1"
-          required
-        />
+      <FloatingField
+        ref={baseURLRef}
+        id="custom-provider-url"
+        label="Base URL"
+        requiredMark
+        type="url"
+        autoComplete="url"
+        monospace
+        value={form.base_url}
+        onChange={(event) =>
+          updateForm({ base_url: event.currentTarget.value })
+        }
+        placeholder="https://api.example.com/v1"
+        required
+      />
 
-        <FloatingField
-          ref={apiKeyRef}
-          id="custom-provider-api-key"
-          label="API key"
-          requiredMark
-          type="password"
-          canTogglePassword
-          monospace
-          autoComplete="new-password"
-          value={form.api_key}
-          onChange={(event) =>
-            updateForm({ api_key: event.currentTarget.value })
-          }
-          placeholder="sk-..."
-          required
-        />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-foreground">
+            API credentials
+          </span>
+          <SegmentedControl
+            label="API key input mode"
+            options={KEY_MODE_OPTIONS}
+            value={form.key_mode}
+            onValueChange={handleKeyModeChange}
+          />
+        </div>
+
+        {form.key_mode === "single" ? (
+          <FloatingField
+            ref={apiKeyRef}
+            id="custom-provider-api-key"
+            label="API key"
+            requiredMark
+            type="password"
+            canTogglePassword
+            monospace
+            autoComplete="new-password"
+            value={form.api_key}
+            onChange={(event) =>
+              updateForm({ api_key: event.currentTarget.value })
+            }
+            placeholder="sk-..."
+            required
+          />
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Textarea
+              ref={bulkKeysRef}
+              id="custom-provider-bulk-keys"
+              aria-label="Bulk API keys"
+              rows={4}
+              value={form.bulk_keys_raw}
+              onChange={(event) =>
+                updateForm({ bulk_keys_raw: event.currentTarget.value })
+              }
+              placeholder={"sk-key-1...\nsk-key-2...\nsk-key-3..."}
+              className="font-mono text-xs"
+              required
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">
+                Paste one API key per line or comma-separated. Keys rotate
+                automatically.
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Badge
+                  tone={bulkParsed.keys.length > 0 ? "info" : "neutral"}
+                  size="sm"
+                >
+                  {bulkParsed.keys.length}{" "}
+                  {bulkParsed.keys.length === 1 ? "key" : "keys"} ready
+                </Badge>
+                {bulkParsed.duplicateCount > 0 && (
+                  <Badge tone="warning" size="sm">
+                    {bulkParsed.duplicateCount}{" "}
+                    {bulkParsed.duplicateCount === 1
+                      ? "duplicate"
+                      : "duplicates"}{" "}
+                    skipped
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

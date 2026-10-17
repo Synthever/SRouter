@@ -7,6 +7,7 @@ use serde_json::Value;
 use crate::constants;
 use crate::error::APIError;
 use crate::infrastructure::database::AppDatabase;
+use crate::infrastructure::database::row::{optional_text, text};
 
 use super::credential_string;
 
@@ -18,6 +19,14 @@ pub struct CustomCredentials {
     pub access_token: Option<String>,
     /// Extra headers the operator supplied, sent as-is on every request.
     pub custom_headers: Vec<(String, String)>,
+}
+
+/// One stored connection candidate for a custom provider, used by the rotator
+/// and 429 failover loop.
+#[derive(Clone, Debug)]
+pub struct CustomCredentialCandidate {
+    pub id: String,
+    pub credentials: CustomCredentials,
 }
 
 impl CustomCredentials {
@@ -40,7 +49,7 @@ pub async fn load_custom_credentials(
         return Ok(None);
     };
 
-    let raw = sqlx::query_scalar::<_, String>("SELECT credentials FROM providers WHERE id = ?")
+    let row = sqlx::query("SELECT credentials, meta FROM providers WHERE id = ?")
         .bind(id)
         .fetch_optional(&pool)
         .await
@@ -51,11 +60,57 @@ pub async fn load_custom_credentials(
             )
         })?;
 
-    let Some(raw) = raw else {
+    let Some(row) = row else {
         return Ok(None);
     };
 
-    Ok(Some(parse_custom_credentials(&raw)))
+    let raw = text(&row, "credentials")?;
+    let meta = optional_text(&row, "meta")?;
+
+    Ok(Some(parse_custom_credentials_with_meta(
+        &raw,
+        meta.as_deref(),
+    )))
+}
+
+/// Loads every enabled connection candidate belonging to a custom provider
+/// (`provider_id = ?`), newest first, so the executor can rotate across keys and
+/// cool down rate-limited ones.
+pub async fn load_custom_credential_candidates(
+    database: &AppDatabase,
+    provider_id: &str,
+) -> Result<Vec<CustomCredentialCandidate>, APIError> {
+    let Some(pool) = database.sqlite_pool() else {
+        return Ok(Vec::new());
+    };
+
+    let rows = sqlx::query(
+        "SELECT id, credentials, meta FROM providers \
+         WHERE provider_id = ? AND enabled = 1 \
+         ORDER BY created_at DESC",
+    )
+    .bind(provider_id)
+    .fetch_all(&pool)
+    .await
+    .map_err(|error| {
+        APIError::new(
+            500,
+            constants::database::with_context("read custom provider credentials", error),
+        )
+    })?;
+
+    let mut candidates = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let id = text(row, "id")?;
+        let raw = text(row, "credentials")?;
+        let meta = optional_text(row, "meta")?;
+        let credentials = parse_custom_credentials_with_meta(&raw, meta.as_deref());
+        if credentials.token().is_some() {
+            candidates.push(CustomCredentialCandidate { id, credentials });
+        }
+    }
+
+    Ok(candidates)
 }
 
 /// Reads one credential blob. The build writes snake_case; the camelCase
@@ -73,6 +128,20 @@ pub fn parse_custom_credentials(raw: &str) -> CustomCredentials {
         access_token: credential_string(object, &["access_token", "accessToken"]),
         custom_headers: custom_headers(object, &value),
     }
+}
+
+fn parse_custom_credentials_with_meta(raw: &str, meta_raw: Option<&str>) -> CustomCredentials {
+    let mut credentials = parse_custom_credentials(raw);
+    if credentials.custom_headers.is_empty()
+        && let Some(meta_value) = meta_raw.and_then(|m| serde_json::from_str::<Value>(m).ok())
+        && let Some(meta_headers) = meta_value.get("custom_headers").and_then(Value::as_object)
+    {
+        credentials.custom_headers = meta_headers
+            .iter()
+            .filter_map(|(name, val)| val.as_str().map(|v| (name.clone(), v.to_owned())))
+            .collect();
+    }
+    credentials
 }
 
 /// Reads the custom headers from the credential blob's `meta.custom_headers`
