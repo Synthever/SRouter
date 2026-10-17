@@ -15,7 +15,7 @@ metadata:
 
 Work inside `client/`. The dashboard is the operator UI for the SRouter gateway; the Rust server in `server/` owns every wire shape, status code, and cookie.
 
-**Current state:** two kinds of screens. **Wired to the API:** `/login` (first-run setup + sign-in) and `/` (the overview dashboard — `useQuery` on `usageStatsQuery`/`analyticsQuery` from `@/api/logs`, plus live SSE via `useLogEvents`). **Static mockups with hardcoded figures:** `keys`, `logs`, `providers`, `settings`, `usage` under `_authenticated/` — they render plausible fake data (fake key prefixes, invented token counts) and must not be mistaken for working data paths. Do not assume a screen exists — or that it is wired — because a type exists. The session itself is shared through `components/admin-auth-provider.tsx` (`useAdminAuth()`).
+**Current state:** two kinds of screens. **Wired to the API:** `/login` (first-run setup + sign-in), `/` (the overview dashboard — `useQuery` on `analyticsQuery` from `@/api/logs`, plus live SSE via `useLogEvents`), and `providers` + `providers/$providerId` (`providersListQuery`, `providerDetailQuery`, and the provider mutations in `@/api/providers`). **Static mockups with hardcoded figures:** `keys`, `logs`, `settings`, `usage` under `_authenticated/` — they import nothing from `@/api` and render plausible fake data (fake key prefixes, invented token counts) that must not be mistaken for working data paths. Do not assume a screen exists — or that it is wired — because a type exists: check for a `@/api` import. The session itself is shared through `components/admin-auth-provider.tsx` (`useAdminAuth()`).
 
 ## When to Use
 

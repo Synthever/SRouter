@@ -4,17 +4,20 @@
 //! - `https://opencode.ai/docs/zen/` identifies OpenCode Zen, documents its API
 //!   endpoints, and lists the model names and ids offered through Zen.
 //! - `https://opencode.ai/inference/v1/models` is the provider's live public model
-//!   catalog. The seven ids in `OPENCODE_ZEN_MODELS` were checked against this
-//!   endpoint and the docs table on 2026-10-11; the seed is an intentional
+//!   catalog. The nine ids in `OPENCODE_ZEN_MODELS` were checked against this
+//!   endpoint and the docs table on 2026-10-17; the seed is an intentional
 //!   subset, not a snapshot of every model returned by the endpoint.
 //!   Deliberately excluded from the seed: `jev-1.13-free` (served on
 //!   `/v1/systemone`, not chat completions), the `muse-spark-*-contributor-free`
 //!   pair (served on `/v1/responses`), and the paid tiers — none of them are
 //!   routable through the OpenAI-protocol executor. `mimo-v2.5-free` was
 //!   dropped: the docs table still lists it, but the live endpoint no longer
-//!   returns it. Three more ids left the seed after the 2026-10-15 live smoke
-//!   test: `exo-free` now answers `410 ModelDeprecated`, and `ling-3.0-flash-fin-free`
-//!   and `ling-3.1-flash-free` answer `400 Model is unavailable`.
+//!   returns it. `nemotron-3-ultra-free` and `step-5-preview-free` were replaced
+//!   on 2026-10-17 by `nemotron-3.5-super-vl-free` and `glm-5.3-flash-free`,
+//!   which the same endpoint now returns. Three more ids left the seed after the
+//!   2026-10-15 live smoke test: `exo-free` now answers `410 ModelDeprecated`,
+//!   and `ling-3.0-flash-fin-free` and `ling-3.1-flash-free` answer
+//!   `400 Model is unavailable`.
 //! - Free-tier chat moved off `/zen/v1/chat/completions` on 2026-10-14: that
 //!   path now answers `403 FreeTierError` to every caller, including the
 //!   official CLI, while the same bodies replayed against

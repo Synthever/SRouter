@@ -26,10 +26,10 @@ client/src/
 │   ├── __root.tsx           root layout; owns the queryClient singleton
 │   ├── _authenticated.tsx   pathless session guard (beforeLoad)
 │   ├── _authenticated/
-│   │   ├── index.tsx        "/" — overview dashboard (wired: usageStatsQuery, analyticsQuery, SSE useLogEvents)
+│   │   ├── index.tsx        "/" — overview dashboard (wired: analyticsQuery, SSE useLogEvents)
 │   │   ├── keys.tsx         API keys — STATIC MOCKUP (hardcoded fake keys)
 │   │   ├── logs.tsx         request logs — STATIC MOCKUP
-│   │   ├── providers/       providers management screens
+│   │   ├── providers/       providers management (wired: providersListQuery, providerDetailQuery)
 │   │   ├── settings.tsx     settings — STATIC MOCKUP
 │   │   └── usage.tsx        usage/quota — STATIC MOCKUP (hardcoded token counts)
 │   └── login.tsx            "/login" — setup + sign-in (wired)
