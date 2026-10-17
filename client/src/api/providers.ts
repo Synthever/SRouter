@@ -261,3 +261,44 @@ export function deleteCustomModel(modelID: string) {
     method: "DELETE",
   })
 }
+
+/**
+ * The slice of the OpenAI chat contract the model probe uses. The gateway's
+ * chat wire types are not yet part of the generated bindings, so this is the
+ * explicit narrow view the probe sends and reads — extend it with the server
+ * rather than growing it ad hoc.
+ */
+export type ModelProbeRequest = {
+  model: string
+  messages: { role: "user"; content: string }[]
+  max_tokens: number
+  stream: false
+}
+
+export type ModelProbeResponse = {
+  choices?: { message?: { content?: string } }[]
+  usage?: { total_tokens?: number }
+}
+
+/** The fixed payload `testModel` sends: a one-token-cheap "Hi". */
+export function modelProbeRequest(model: string): ModelProbeRequest {
+  return {
+    messages: [{ content: "Hi", role: "user" }],
+    max_tokens: 16,
+    model,
+    stream: false,
+  }
+}
+
+/**
+ * `POST /v1/chat/completions` with the minimum probe body. Accepts either the
+ * session cookie (dashboard) or a gateway API key, exactly like the catalog
+ * read routes; failures surface as `APIError`.
+ */
+export function testModel(body: ModelProbeRequest) {
+  return request<ModelProbeResponse>("/v1/chat/completions", {
+    method: "POST",
+    body,
+  })
+}
+

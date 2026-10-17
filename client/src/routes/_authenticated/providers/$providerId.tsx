@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   Eye,
   EyeOff,
+  FlaskConical,
+  LoaderCircle,
   Network,
   Plus,
   RefreshCw,
@@ -16,8 +18,10 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   deleteCustomModel,
   deleteProviderConnection,
+  modelProbeRequest,
   patchProvider,
   providerDetailQuery,
+  testModel,
   toggleRoundRobin,
 } from "@/api/providers"
 import type { ProviderConnectionView } from "@/api/types"
@@ -104,6 +108,8 @@ function ProviderDetailPage() {
   const [connectModalOpen, setConnectModalOpen] = useState(false)
   const [addModelsOpen, setAddModelsOpen] = useState(false)
   const [modelSearch, setModelSearch] = useState("")
+  // The one model ID whose probe is in flight, for button feedback.
+  const [probingModelID, setProbingModelID] = useState<string | null>(null)
   // Track IDs hidden from UI for exit animation
   const [removedConnectionIDs, setRemovedConnectionIDs] = useState<string[]>([])
 
@@ -194,6 +200,27 @@ function ProviderDetailPage() {
       )
     },
   })
+
+  async function handleTestModel(modelID: string) {
+    if (probingModelID !== null) return
+    setProbingModelID(modelID)
+    const startedAt = performance.now()
+    try {
+      const response = await testModel(modelProbeRequest(modelID))
+      const content = response.choices?.[0]?.message?.content?.trim()
+      const latency = Math.round(performance.now() - startedAt)
+      toast.success(`Model ${modelID} responded in ${latency} ms`, {
+        description: content ? `Reply: ${content}` : undefined,
+      })
+    } catch (err) {
+      toast.error(`Test failed for ${modelID}`, {
+        description:
+          err instanceof Error ? err.message : "The gateway rejected the probe",
+      })
+    } finally {
+      setProbingModelID(null)
+    }
+  }
 
   const removeConnectionMutation = useMutation({
     mutationFn: (connectionID: string) =>
@@ -712,6 +739,32 @@ function ProviderDetailPage() {
                             {m.id}
                           </span>
                           <CopyButton value={m.id} iconOnly variant="plain" />
+                          <Tooltip content="Send a tiny chat probe to this model">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              loading={probingModelID === m.id}
+                              disabled={probingModelID !== null}
+                              onClick={() => void handleTestModel(m.id)}
+                              className="h-7 px-2 text-xs"
+                              aria-label={`Test model ${m.id}`}
+                            >
+                              {probingModelID === m.id ? (
+                                <LoaderCircle
+                                  size={13}
+                                  className="animate-spin text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <FlaskConical
+                                  size={13}
+                                  className="text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span className="hidden sm:inline">Test</span>
+                            </Button>
+                          </Tooltip>
                           {m.custom && (
                             <Badge tone="neutral" size="sm">
                               Custom
