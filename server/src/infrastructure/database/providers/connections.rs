@@ -74,18 +74,30 @@ pub async fn list_connections(database: &AppDatabase) -> Result<Vec<ProviderConn
 
     let mut connections = Vec::with_capacity(rows.len());
     for row in &rows {
+        let meta = optional_text(row, "meta")?;
         // Seed rows describe drivers, not connections, and would otherwise be
         // counted as a live provider.
-        if is_seed_row(optional_text(row, "meta")?.as_deref()) {
+        if is_seed_row(meta.as_deref()) {
             continue;
         }
+
+        let category = text(row, "category")?;
+        let raw_name = text(row, "name")?;
+        let name = if category == "custom_provider"
+            && !raw_name.ends_with(')')
+            && let Some(hint) = custom_key_hint(meta.as_deref())
+        {
+            format!("{raw_name} ({hint})")
+        } else {
+            raw_name
+        };
 
         connections.push(ProviderConnection {
             id: text(row, "id")?,
             provider_id: text(row, "provider_id")?,
-            name: text(row, "name")?,
+            name,
             alias: optional_text(row, "alias")?,
-            category: text(row, "category")?,
+            category,
             protocol: text(row, "protocol")?,
             base_url: optional_text(row, "base_url")?,
             enabled: integer(row, "enabled")? != 0,
@@ -94,6 +106,15 @@ pub async fn list_connections(database: &AppDatabase) -> Result<Vec<ProviderConn
     }
 
     Ok(connections)
+}
+
+fn custom_key_hint(meta: Option<&str>) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(meta?).ok()?;
+    parsed
+        .get("api_key_Hint")
+        .and_then(serde_json::Value::as_str)
+        .filter(|hint| !hint.is_empty())
+        .map(str::to_owned)
 }
 
 /// Reads one stored connection by its internal id. A seed row—or an unknown
@@ -112,12 +133,89 @@ pub async fn find_connection(
 /// route can answer `404`. The id is checked against [`find_connection`] first,
 /// which keeps a seed driver row—a row `list_connections` never reports—out of
 /// reach of a raw id guess.
+///
+/// For a custom provider whose root row (`id == provider_id`) is deleted as a
+/// connection while child key rows still exist, the newest child key's
+/// credentials and metadata are promoted onto the root row and the child row is
+/// dropped so the custom provider itself stays registered.
 pub async fn delete_connection(database: &AppDatabase, id: &str) -> Result<bool, APIError> {
-    if find_connection(database, id).await?.is_none() {
+    let Some(connection) = find_connection(database, id).await? else {
         return Ok(false);
-    }
+    };
 
     let pool = database.sqlite_required(constants::database::PROVIDERS_UNSUPPORTED)?;
+
+    if connection.category == "custom_provider"
+        && (connection.provider_id.is_empty() || connection.id == connection.provider_id)
+    {
+        let mut transaction = pool.begin().await.map_err(|error| {
+            APIError::new(
+                500,
+                constants::database::could_not_start_provider_update(&error),
+            )
+        })?;
+
+        let child = sqlx::query(
+            "SELECT id, credentials, meta, enabled FROM providers \
+             WHERE provider_id = ? AND id != ? AND category = 'custom_provider' \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&connection.id)
+        .bind(&connection.id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|error| {
+            APIError::new(
+                500,
+                constants::database::could_not_read_provider_connections(&error),
+            )
+        })?;
+
+        if let Some(child) = child {
+            let child_id = text(&child, "id")?;
+            let child_credentials = text(&child, "credentials")?;
+            let child_meta = optional_text(&child, "meta")?;
+            let child_enabled = integer(&child, "enabled")?;
+
+            sqlx::query("UPDATE providers SET credentials = ?, meta = ?, enabled = ? WHERE id = ?")
+                .bind(&child_credentials)
+                .bind(&child_meta)
+                .bind(child_enabled)
+                .bind(&connection.id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|error| {
+                    APIError::new(
+                        500,
+                        constants::database::with_context(
+                            "promote custom provider connection",
+                            error,
+                        ),
+                    )
+                })?;
+
+            sqlx::query("DELETE FROM providers WHERE id = ?")
+                .bind(&child_id)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|error| {
+                    APIError::new(
+                        500,
+                        constants::database::with_context("delete the provider connection", error),
+                    )
+                })?;
+
+            transaction.commit().await.map_err(|error| {
+                APIError::new(
+                    500,
+                    constants::database::could_not_commit_provider_update(&error),
+                )
+            })?;
+
+            return Ok(true);
+        }
+    }
+
     let affected = sqlx::query("DELETE FROM providers WHERE id = ?")
         .bind(id)
         .execute(&pool)

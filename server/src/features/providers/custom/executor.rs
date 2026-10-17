@@ -27,8 +27,12 @@ use crate::features::providers::custom::catalog::{
     CATALOG_RETRY_MS, CATALOG_TTL_MS, SharedCatalog, read_catalog, write_catalog,
 };
 use crate::features::providers::executor::{BoxFuture, ProviderExecutor};
+use crate::features::providers::rotation::{AccountRotator, is_rate_limited, round_robin_enabled};
 use crate::infrastructure::database::AppDatabase;
-use crate::infrastructure::database::providers::{CustomCredentials, load_custom_credentials};
+use crate::infrastructure::database::providers::{
+    CustomCredentialCandidate, CustomCredentials, load_custom_credential_candidates,
+    load_custom_credentials,
+};
 use crate::infrastructure::upstream::UpstreamClient;
 use crate::protocol::image::ImageGenerationRequest;
 use crate::protocol::model::ChatCompletionRequest;
@@ -60,6 +64,7 @@ pub struct CustomProvider {
     client: UpstreamClient,
     catalog: SharedCatalog,
     refresh_lock: Arc<tokio::sync::Mutex<()>>,
+    rotator: Arc<AccountRotator>,
 }
 
 impl CustomProvider {
@@ -73,6 +78,7 @@ impl CustomProvider {
             client: UpstreamClient::new()?,
             catalog: crate::features::providers::custom::catalog::CustomCatalog::shared_empty(),
             refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
+            rotator: AccountRotator::shared(),
         })
     }
 
@@ -88,17 +94,49 @@ impl CustomProvider {
         self.row.prefix.as_deref().unwrap_or(&self.row.id)
     }
 
-    /// Reads the row's credentials at request time. A row without a database
-    /// handle cannot be reached; the gateway always has one.
-    async fn credentials(&self) -> Result<CustomCredentials, APIError> {
+    /// Reads the provider's enabled credential candidates, newest first. When no
+    /// candidate row holds a non-empty token (e.g. a keyless local endpoint), a
+    /// single fallback candidate with the root row's headers is returned.
+    async fn candidates(&self) -> Result<Vec<CustomCredentialCandidate>, APIError> {
         let database = self
             .database
             .as_ref()
             .ok_or_else(|| APIError::new(500, constants::providers::DATABASE_REQUIRED))?;
 
-        Ok(load_custom_credentials(database, &self.row.id)
+        let candidates = load_custom_credential_candidates(database, &self.row.id).await?;
+        if !candidates.is_empty() {
+            return Ok(candidates);
+        }
+
+        let fallback = load_custom_credentials(database, &self.row.id)
             .await?
-            .unwrap_or_default())
+            .unwrap_or_default();
+        Ok(vec![CustomCredentialCandidate {
+            id: self.row.id.clone(),
+            credentials: fallback,
+        }])
+    }
+
+    /// Picks one credential candidate using the provider's round-robin setting
+    /// and cooldown state.
+    async fn pick_candidate<'a>(
+        &self,
+        candidates: &'a [CustomCredentialCandidate],
+    ) -> Result<&'a CustomCredentialCandidate, APIError> {
+        let database = self
+            .database
+            .as_ref()
+            .ok_or_else(|| APIError::new(500, constants::providers::DATABASE_REQUIRED))?;
+        let enabled = round_robin_enabled(database, &self.row.id).await;
+        let ids: Vec<String> = candidates.iter().map(|entry| entry.id.clone()).collect();
+
+        Ok(&candidates[self.rotator.choose(enabled, &ids)])
+    }
+
+    /// Reads one active credential for catalog refreshes.
+    async fn credentials(&self) -> Result<CustomCredentials, APIError> {
+        let candidates = self.candidates().await?;
+        Ok(self.pick_candidate(&candidates).await?.credentials.clone())
     }
 
     /// The upstream chat endpoint for this protocol family.
@@ -182,22 +220,20 @@ impl CustomProvider {
         builder
     }
 
-    pub async fn chat_completion(
+    async fn send_once(
         &self,
-        model: &str,
-        request: &ChatCompletionRequest,
-    ) -> Result<Value, APIError> {
-        let credentials = self.credentials().await?;
-        let body = self.request_body(model, request, false)?;
+        url: &str,
+        body: &Value,
+        credentials: &CustomCredentials,
+        stream: bool,
+    ) -> Result<reqwest::Response, APIError> {
+        let mut builder = self.client.raw().post(url);
+        if !stream {
+            builder = builder.timeout(self.client.request_timeout());
+        }
         let response = self
-            .sign(
-                self.client
-                    .raw()
-                    .post(self.chat_url())
-                    .timeout(self.client.request_timeout()),
-                &credentials,
-            )
-            .json(&body)
+            .sign(builder, credentials)
+            .json(body)
             .send()
             .await
             .map_err(upstream_error)?;
@@ -205,8 +241,51 @@ impl CustomProvider {
         let status = response.status();
         if !status.is_success() {
             let detail = response.text().await.unwrap_or_default();
-            return Err(upstream_status_error(status, &detail));
+            return Err(if stream {
+                upstream_stream_status_error(status, &detail)
+            } else {
+                upstream_status_error(status, &detail)
+            });
         }
+
+        Ok(response)
+    }
+
+    async fn send_with_failover(
+        &self,
+        url: &str,
+        body: &Value,
+        stream: bool,
+    ) -> Result<reqwest::Response, APIError> {
+        let candidates = self.candidates().await?;
+        let mut last: Option<APIError> = None;
+
+        for _ in 0..candidates.len() {
+            let candidate = self.pick_candidate(&candidates).await?;
+            match self
+                .send_once(url, body, &candidate.credentials, stream)
+                .await
+            {
+                Err(error) if is_rate_limited(&error) => {
+                    self.rotator.cool(&candidate.id);
+                    last = Some(error);
+                }
+                outcome => return outcome,
+            }
+        }
+
+        Err(last.expect("a bounded loop over non-empty candidates ran at least once"))
+    }
+
+    pub async fn chat_completion(
+        &self,
+        model: &str,
+        request: &ChatCompletionRequest,
+    ) -> Result<Value, APIError> {
+        let body = self.request_body(model, request, false)?;
+        let response = self
+            .send_with_failover(&self.chat_url(), &body, false)
+            .await?;
 
         let payload: Value = response.json().await.map_err(|error| {
             APIError::new(500, constants::providers::could_not_decode_response(&error))
@@ -225,20 +304,10 @@ impl CustomProvider {
         model: &str,
         request: &ChatCompletionRequest,
     ) -> Result<ProviderStream, APIError> {
-        let credentials = self.credentials().await?;
         let body = self.request_body(model, request, true)?;
         let response = self
-            .sign(self.client.raw().post(self.chat_url()), &credentials)
-            .json(&body)
-            .send()
-            .await
-            .map_err(upstream_error)?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
-            return Err(upstream_stream_status_error(status, &detail));
-        }
+            .send_with_failover(&self.chat_url(), &body, true)
+            .await?;
 
         Ok(match self.shape {
             ProviderShape::OpenAI => encode_stream(response.bytes_stream()),
@@ -332,31 +401,13 @@ impl CustomProvider {
             );
         }
 
-        let credentials = self.credentials().await?;
         let url = format!("{}/images/generations", self.base_url());
         let mut body = serde_json::to_value(request).map_err(|error| {
             APIError::new(500, constants::providers::could_not_build_request(&error))
         })?;
         body["model"] = Value::String(model.to_owned());
 
-        let response = self
-            .sign(
-                self.client
-                    .raw()
-                    .post(&url)
-                    .timeout(self.client.request_timeout()),
-                &credentials,
-            )
-            .json(&body)
-            .send()
-            .await
-            .map_err(upstream_error)?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let detail = response.text().await.unwrap_or_default();
-            return Err(upstream_status_error(status, &detail));
-        }
+        let response = self.send_with_failover(&url, &body, false).await?;
 
         response.json::<Value>().await.map_err(|error| {
             APIError::new(500, constants::providers::could_not_decode_response(&error))

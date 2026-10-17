@@ -385,6 +385,21 @@ pub mod providers {
     /// The `message` both connection delete routes answer on success.
     pub const CONNECTION_DELETED: &str = "Connection deleted";
 
+    pub const NAME_REQUIRED: &str = "Field 'name' is required";
+    pub const BASE_URL_REQUIRED: &str = "Field 'base_url' is required";
+    pub const INVALID_CATEGORY: &str = "Invalid provider category";
+    pub const INVALID_PROTOCOL: &str = "Invalid provider protocol";
+    pub const API_KEY_REQUIRED: &str = "API key is required for API key and custom providers";
+    pub const TOO_MANY_API_KEYS: &str = "At most 100 API keys may be added in one request";
+    pub const INVALID_BASE_URL: &str = "Base URL must be a valid public HTTP or HTTPS URL";
+    pub const INVALID_VERIFY_PAYLOAD: &str = "Invalid verification payload";
+    pub const CUSTOM_PROVIDER_NOT_STORED: &str = "the custom provider was not stored";
+    pub const NOT_CONNECTED: &str = "No active connection found for this custom provider. Connect an API key in the Providers tab.";
+
+    pub fn provider_id_already_exists(id: impl std::fmt::Display) -> String {
+        format!("Provider ID '{id}' already exists")
+    }
+
     /// The `Invalid model payload` message the `/v1/models` writes return when
     /// the body is missing a usable `model_id` or is not a JSON object. Wording
     /// is frozen against `apps/api/src/controllers/favorites.controller.ts`.

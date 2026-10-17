@@ -15,8 +15,11 @@
 //! - `POST /v1/providers/verify` — probe an unsaved endpoint.
 //! - `POST /v1/providers/connections/verify` — probe a saved connection by id.
 
+use std::collections::HashSet;
+
 use axum::body::Bytes;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::Serialize;
@@ -25,17 +28,53 @@ use uuid::Uuid;
 
 use crate::constants;
 use crate::error::APIError;
+use crate::features::providers::ProviderProtocol;
 use crate::features::providers::custom::{
-    NewCustomProvider, create_custom_provider, delete_custom_provider, find_custom_provider,
+    NewCustomProvider, add_custom_provider_connections, create_custom_provider,
+    delete_custom_provider, find_custom_connection_row, find_custom_provider,
     refresh_custom_provider, unregister_custom_provider,
 };
 use crate::features::providers::management::model::ProviderEntry;
+use crate::features::providers::management::routes::detail_entry;
 use crate::infrastructure::database::providers::{load_custom_credentials, provider_exists};
 use crate::infrastructure::upstream::ssrf;
 use crate::state::AppState;
 
-/// The request shape `POST /v1/providers` and the edit `PATCH` accept.
-#[derive(Debug, Default)]
+const MAX_BULK_API_KEYS: usize = 100;
+
+/// Request body for `POST /v1/providers`. Derived for the TypeScript contract;
+/// deliberately omits `Debug` and `PartialEq` because it carries API keys.
+#[derive(Serialize, specta::Type)]
+pub struct CreateCustomProviderInput {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub prefix: Option<String>,
+    pub protocol: ProviderProtocol,
+    pub base_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub api_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub api_keys: Option<Vec<String>>,
+}
+
+/// Request body for `POST /v1/providers/{provider_id}/connections`. Deliberately
+/// omits `Debug` and `PartialEq` because it carries API keys.
+#[derive(Serialize, specta::Type)]
+pub struct AddProviderConnectionsInput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub name: Option<String>,
+    pub api_keys: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub prefix: Option<String>,
+}
+
+/// The request shape `POST /v1/providers` and the verification probes accept.
+#[derive(Default)]
 struct ProviderPayload {
     id: Option<String>,
     name: Option<String>,
@@ -44,6 +83,7 @@ struct ProviderPayload {
     protocol: Option<String>,
     base_url: Option<String>,
     api_key: Option<String>,
+    api_keys: Vec<String>,
     custom_headers: Vec<(String, String)>,
 }
 
@@ -60,7 +100,7 @@ pub async fn add_provider(
         .as_deref()
         .map(str::trim)
         .filter(|name| !name.is_empty())
-        .ok_or_else(|| APIError::new(400, "Field 'name' is required"))?
+        .ok_or_else(|| APIError::new(400, constants::providers::NAME_REQUIRED))?
         .to_owned();
     let category = payload
         .category
@@ -69,7 +109,7 @@ pub async fn add_provider(
         .filter(|category| !category.is_empty())
         .unwrap_or("custom_provider");
     if !is_provider_category(category) {
-        return Err(APIError::new(400, "Invalid provider category"));
+        return Err(APIError::new(400, constants::providers::INVALID_CATEGORY));
     }
 
     let protocol = payload
@@ -79,7 +119,7 @@ pub async fn add_provider(
         .filter(|protocol| !protocol.is_empty())
         .unwrap_or("openai");
     if !is_provider_protocol(protocol) {
-        return Err(APIError::new(400, "Invalid provider protocol"));
+        return Err(APIError::new(400, constants::providers::INVALID_PROTOCOL));
     }
 
     let base_url = payload
@@ -87,22 +127,14 @@ pub async fn add_provider(
         .as_deref()
         .map(str::trim)
         .filter(|url| !url.is_empty())
-        .ok_or_else(|| APIError::new(400, "Field 'base_url' is required"))?
+        .ok_or_else(|| APIError::new(400, constants::providers::BASE_URL_REQUIRED))?
         .to_owned();
     assert_public_url(&base_url).await?;
 
-    let api_key = payload
-        .api_key
-        .as_deref()
-        .map(str::trim)
-        .filter(|key| !key.is_empty())
-        .map(str::to_owned);
+    let keys = collect_api_keys(payload.api_key.as_deref(), &payload.api_keys)?;
     // Only a custom provider carries its own key, and the UI always sends one.
-    if (category == "api_key" || category == "custom_provider") && api_key.is_none() {
-        return Err(APIError::new(
-            400,
-            "API key is required for API key and custom providers",
-        ));
+    if (category == "api_key" || category == "custom_provider") && keys.is_empty() {
+        return Err(APIError::new(400, constants::providers::API_KEY_REQUIRED));
     }
 
     // A UUID v4 is the immutable internal id, like Node's `crypto.randomUUID()`.
@@ -111,7 +143,7 @@ pub async fn add_provider(
             if provider_exists(database, &explicit).await? {
                 return Err(APIError::new(
                     400,
-                    format!("Provider ID '{explicit}' already exists"),
+                    constants::providers::provider_id_already_exists(&explicit),
                 ));
             }
             explicit
@@ -119,27 +151,80 @@ pub async fn add_provider(
         _ => Uuid::new_v4().to_string(),
     };
 
+    let prefix = payload
+        .prefix
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+
     create_custom_provider(
         database,
         &id,
         &NewCustomProvider {
-            name,
-            prefix: payload.prefix.as_deref().map(str::trim).map(str::to_owned),
+            name: name.clone(),
+            prefix: prefix.clone(),
             protocol: protocol.to_owned(),
             base_url: base_url.clone(),
-            api_key,
+            api_key: keys.first().cloned(),
             custom_headers: payload.custom_headers,
         },
     )
     .await?;
 
-    refresh_custom_provider(&state.providers, database, &id).await?;
-
     let row = find_custom_provider(database, &id)
         .await?
-        .ok_or_else(|| APIError::new(500, "the custom provider was not stored"))?;
+        .ok_or_else(|| APIError::new(500, constants::providers::CUSTOM_PROVIDER_NOT_STORED))?;
 
-    Ok(Json(ProviderEntry::from_custom(&row, 1)))
+    if keys.len() > 1 {
+        add_custom_provider_connections(database, &row, Some(&name), prefix.as_deref(), &keys[1..])
+            .await?;
+    }
+
+    refresh_custom_provider(&state.providers, database, &id).await?;
+
+    let connected_count = keys.len().max(1);
+    Ok(Json(ProviderEntry::from_custom(&row, connected_count)))
+}
+
+/// `POST /v1/providers/{provider_id}/connections` — appends one or more API keys
+/// to an existing custom provider's rotation pool.
+pub async fn add_provider_connections(
+    State(state): State<AppState>,
+    Path(provider_id): Path<String>,
+    body: Bytes,
+) -> Result<(StatusCode, Json<ProviderEntry>), APIError> {
+    let payload = parse_payload(&body)?;
+    let database = require_database(&state)?;
+
+    let normalized_id = provider_id.trim().to_lowercase();
+    let Some(row) = find_custom_provider(database, &normalized_id).await? else {
+        return Err(APIError::new(
+            404,
+            constants::providers::not_found(&provider_id),
+        ));
+    };
+
+    let keys = collect_api_keys(payload.api_key.as_deref(), &payload.api_keys)?;
+    if keys.is_empty() {
+        return Err(APIError::new(400, constants::providers::API_KEY_REQUIRED));
+    }
+
+    add_custom_provider_connections(
+        database,
+        &row,
+        payload.name.as_deref(),
+        payload.prefix.as_deref(),
+        &keys,
+    )
+    .await?;
+
+    refresh_custom_provider(&state.providers, database, &row.id).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(detail_entry(&state, &row.id).await?),
+    ))
 }
 
 /// `DELETE /v1/providers/{id}` — deletes a custom provider row.
@@ -187,14 +272,14 @@ pub async fn verify_provider(
         assert_public_url(base_url).await?;
     }
 
+    let first_key = payload
+        .api_keys
+        .first()
+        .map(String::as_str)
+        .or(payload.api_key.as_deref());
+
     Ok(Json(
-        probe(
-            &state,
-            protocol,
-            base_url.as_deref(),
-            payload.api_key.as_deref(),
-        )
-        .await,
+        probe(&state, protocol, base_url.as_deref(), first_key).await,
     ))
 }
 
@@ -212,9 +297,9 @@ pub async fn verify_connection(
         .as_deref()
         .map(str::trim)
         .filter(|id| !id.is_empty())
-        .ok_or_else(|| APIError::new(400, "Invalid verification payload"))?;
+        .ok_or_else(|| APIError::new(400, constants::providers::INVALID_VERIFY_PAYLOAD))?;
 
-    let Some(row) = find_custom_provider(database, connection_id).await? else {
+    let Some(row) = find_custom_connection_row(database, connection_id).await? else {
         return Err(APIError::new(
             404,
             constants::providers::connection_not_found(connection_id),
@@ -351,7 +436,36 @@ pub fn create_custom_provider_router() -> Router<AppState> {
         .route("/providers", post(add_provider))
         .route("/providers/verify", post(verify_provider))
         .route("/providers/connections/verify", post(verify_connection))
+        .route(
+            "/providers/{provider_id}/connections",
+            post(add_provider_connections),
+        )
         .route("/providers/{provider_id}", delete(delete_provider))
+}
+
+/// Collects, trims, and deduplicates API keys from `api_keys` and/or `api_key`.
+/// Also splits newline-separated keys if passed inside a single string.
+fn collect_api_keys(
+    single_key: Option<&str>,
+    bulk_keys: &[String],
+) -> Result<Vec<String>, APIError> {
+    let mut seen = HashSet::new();
+    let mut keys = Vec::new();
+
+    for raw in bulk_keys.iter().map(String::as_str).chain(single_key) {
+        for part in raw.lines() {
+            let trimmed = part.trim();
+            if !trimmed.is_empty() && seen.insert(trimmed.to_owned()) {
+                keys.push(trimmed.to_owned());
+            }
+        }
+    }
+
+    if keys.len() > MAX_BULK_API_KEYS {
+        return Err(APIError::new(400, constants::providers::TOO_MANY_API_KEYS));
+    }
+
+    Ok(keys)
 }
 
 /// Reads the request body. An unknown key is ignored; a body that is not an
@@ -364,6 +478,20 @@ fn parse_payload(body: &[u8]) -> Result<ProviderPayload, APIError> {
         .ok_or_else(|| APIError::new(400, constants::common::INVALID_PAYLOAD))?;
 
     let text = |key: &str| object.get(key).and_then(Value::as_str).map(str::to_owned);
+
+    let api_keys = match object.get("api_keys") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|entry| {
+                entry
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| APIError::new(400, constants::common::INVALID_PAYLOAD))
+            })
+            .collect::<Result<Vec<String>, APIError>>()?,
+        Some(Value::Null) | None => Vec::new(),
+        Some(_) => return Err(APIError::new(400, constants::common::INVALID_PAYLOAD)),
+    };
 
     let custom_headers = object
         .get("custom_headers")
@@ -388,6 +516,7 @@ fn parse_payload(body: &[u8]) -> Result<ProviderPayload, APIError> {
         protocol: text("protocol"),
         base_url: text("base_url"),
         api_key: text("api_key"),
+        api_keys,
         custom_headers,
     })
 }
@@ -410,25 +539,16 @@ fn is_provider_protocol(protocol: &str) -> bool {
 /// built-in `verify` route uses.
 async fn assert_public_url(base_url: &str) -> Result<(), APIError> {
     let parsed = url::Url::parse(base_url)
-        .map_err(|_| APIError::new(400, "Base URL must be a valid public HTTP or HTTPS URL"))?;
+        .map_err(|_| APIError::new(400, constants::providers::INVALID_BASE_URL))?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(APIError::new(
-            400,
-            "Base URL must be a valid public HTTP or HTTPS URL",
-        ));
+        return Err(APIError::new(400, constants::providers::INVALID_BASE_URL));
     }
     let Some(host) = parsed.host_str() else {
-        return Err(APIError::new(
-            400,
-            "Base URL must be a valid public HTTP or HTTPS URL",
-        ));
+        return Err(APIError::new(400, constants::providers::INVALID_BASE_URL));
     };
     let port = parsed.port_or_known_default().unwrap_or(443);
     if ssrf::is_blocked_host(host, port).await {
-        return Err(APIError::new(
-            400,
-            "Base URL must be a valid public HTTP or HTTPS URL",
-        ));
+        return Err(APIError::new(400, constants::providers::INVALID_BASE_URL));
     }
 
     Ok(())

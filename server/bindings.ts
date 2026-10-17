@@ -18,6 +18,16 @@ export type APIKeyResponse = {
 };
 
 /**
+ *  Request body for `POST /v1/providers/{provider_id}/connections`. Deliberately
+ *  omits `Debug` and `PartialEq` because it carries API keys.
+ */
+export type AddProviderConnectionsInput = {
+	name?: string | null,
+	api_keys: string[],
+	prefix?: string | null,
+};
+
+/**
  *  The answer to `POST /v1/admin/setup` and `POST /v1/admin/login`. Both only
  *  succeed by setting the session cookie, so `authenticated` is always true.
  */
@@ -178,6 +188,26 @@ export type CreateAPIKeyInput = {
 	allowed_models?: string[] | null,
 };
 
+/**
+ *  Request body for `POST /v1/providers`. Derived for the TypeScript contract;
+ *  deliberately omits `Debug` and `PartialEq` because it carries API keys.
+ */
+export type CreateCustomProviderInput = {
+	name: string,
+	prefix?: string | null,
+	protocol: ProviderProtocol,
+	base_url: string,
+	api_key?: string | null,
+	api_keys?: string[] | null,
+};
+
+/**  Request body for `POST /v1/models`. */
+export type CreateModelInput = {
+	model_id: string,
+	favorite?: boolean | null,
+	hidden?: boolean | null,
+};
+
 /**  Creation response: the management fields plus the one-time full secret. */
 export type CreatedAPIKeyResponse = {
 	key: string,
@@ -192,6 +222,11 @@ export type DatabaseImportResponse = {
 	backup_path: string,
 	restart_required: boolean,
 	reauth_required: boolean,
+};
+
+/**  Response body for `DELETE /v1/models/{*model}`. */
+export type DeleteModelResponse = {
+	deleted: boolean,
 };
 
 export type ErrorBody = {
@@ -411,6 +446,7 @@ export type ProviderConnectionView = {
 export type ProviderEntry = {
 	id: string,
 	name: string,
+	prefix?: string | null,
 	category: string,
 	protocol: ProviderProtocol,
 	default_base_url: string,
@@ -442,6 +478,7 @@ export type ProviderModel = {
 	owned_by: string,
 	hidden: boolean,
 	favorite: boolean,
+	custom: boolean,
 };
 
 /**

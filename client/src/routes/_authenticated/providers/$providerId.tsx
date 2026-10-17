@@ -14,6 +14,7 @@ import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 
 import {
+  deleteCustomModel,
   deleteProviderConnection,
   patchProvider,
   providerDetailQuery,
@@ -35,6 +36,7 @@ import {
 } from "@/components/arc/tabs/tabs"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
 import { Tooltip } from "@/components/arc/tooltip/tooltip"
+import { AddCustomModelsDialog } from "@/components/providers/AddCustomModelsDialog"
 import { ConnectAccountModal } from "@/components/providers/modals/ConnectAccounts"
 import { ProviderLogo } from "@/components/providers/provider-logo"
 
@@ -100,6 +102,7 @@ function ProviderDetailPage() {
   const queryClient = useQueryClient()
   const reducedMotion = useReducedMotion() ?? false
   const [connectModalOpen, setConnectModalOpen] = useState(false)
+  const [addModelsOpen, setAddModelsOpen] = useState(false)
   const [modelSearch, setModelSearch] = useState("")
   // Track IDs hidden from UI for exit animation
   const [removedConnectionIDs, setRemovedConnectionIDs] = useState<string[]>([])
@@ -179,6 +182,19 @@ function ProviderDetailPage() {
     },
   })
 
+  const deleteCustomModelMutation = useMutation({
+    mutationFn: (modelID: string) => deleteCustomModel(modelID),
+    onSuccess: (_data, modelID) => {
+      void queryClient.invalidateQueries({ queryKey: ["providers"] })
+      toast.success(`Removed ${modelID}`)
+    },
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove custom model"
+      )
+    },
+  })
+
   const removeConnectionMutation = useMutation({
     mutationFn: (connectionID: string) =>
       deleteProviderConnection(providerId, connectionID),
@@ -207,19 +223,33 @@ function ProviderDetailPage() {
     toast.success(`Removed ${connection.name}`)
   }
 
-  // Filter models so only models actually belonging to this provider are shown
-  // (e.g. `qoder/...` or owned_by === `qoder`)
+  const effectivePrefix = useMemo(() => {
+    if (!provider) return ""
+    const connPrefix = provider.connections?.find(
+      (c) => c.prefix && c.prefix.trim().length > 0
+    )?.prefix
+    return (provider.prefix || connPrefix || provider.id).trim()
+  }, [provider])
+
+  // Filter models so only models belonging to this provider (by id or model prefix) are shown
   const models = useMemo(() => {
     const allModels = provider?.models ?? []
     if (!provider) return []
-    const prefix = `${provider.id.toLowerCase()}/`
-    const owner = provider.id.toLowerCase()
+    const candidates = new Set<string>([provider.id.toLowerCase()])
+    if (effectivePrefix) {
+      candidates.add(effectivePrefix.toLowerCase())
+    }
     return allModels.filter((m) => {
       const id = m.id.toLowerCase()
       const ownedBy = m.owned_by.toLowerCase()
-      return id.startsWith(prefix) || ownedBy === owner
+      for (const candidate of candidates) {
+        if (id.startsWith(`${candidate}/`) || ownedBy === candidate) {
+          return true
+        }
+      }
+      return false
     })
-  }, [provider])
+  }, [provider, effectivePrefix])
 
   const filteredModels = useMemo(() => {
     if (!models || models.length === 0) return []
@@ -606,19 +636,30 @@ function ProviderDetailPage() {
                   Advertised models
                 </h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Models routed to this driver. Toggle favorites or hide models
-                  from client discovery.
+                  Models routed to this driver. Toggle favorites, hide models
+                  from discovery, or register custom model IDs manually.
                 </p>
               </div>
 
-              <SearchField
-                label="Search models"
-                id="model-filter"
-                value={modelSearch}
-                onValueChange={setModelSearch}
-                placeholder="Filter models by id or owner..."
-                className="w-full sm:max-w-xs"
-              />
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <SearchField
+                  label="Search models"
+                  id="model-filter"
+                  value={modelSearch}
+                  onValueChange={setModelSearch}
+                  placeholder="Filter models by id or owner..."
+                  className="w-full sm:w-64"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setAddModelsOpen(true)}
+                  className="flex shrink-0 items-center justify-center gap-1.5"
+                >
+                  <Plus size={13} aria-hidden="true" />
+                  <span>Add models</span>
+                </Button>
+              </div>
             </div>
 
             {filteredModels.length > 0 ? (
@@ -660,7 +701,7 @@ function ProviderDetailPage() {
                       </Tooltip>
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span
                             className={`font-mono text-xs font-medium ${
                               m.hidden
@@ -671,6 +712,11 @@ function ProviderDetailPage() {
                             {m.id}
                           </span>
                           <CopyButton value={m.id} iconOnly variant="plain" />
+                          {m.custom && (
+                            <Badge tone="neutral" size="sm">
+                              Custom
+                            </Badge>
+                          )}
                         </div>
                         <span className="block text-[11px] text-muted-foreground">
                           owned by {m.owned_by}
@@ -719,6 +765,18 @@ function ProviderDetailPage() {
                           )}
                         </Button>
                       </Tooltip>
+                      {m.custom && (
+                        <HoldToConfirm
+                          label="Hold to remove"
+                          confirmedLabel="Removed"
+                          tone="danger"
+                          size="sm"
+                          disabled={deleteCustomModelMutation.isPending}
+                          onConfirm={() =>
+                            deleteCustomModelMutation.mutate(m.id)
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -732,7 +790,7 @@ function ProviderDetailPage() {
                 description={
                   modelSearch
                     ? "Try adjusting your search query."
-                    : "This driver has not advertised any models in its catalog yet."
+                    : "This driver has not advertised any models in its catalog yet. You can add custom model IDs manually."
                 }
               />
             )}
@@ -745,6 +803,18 @@ function ProviderDetailPage() {
         onOpenChange={setConnectModalOpen}
         provider={provider}
         onSuccess={() => void refetch()}
+      />
+
+      <AddCustomModelsDialog
+        open={addModelsOpen}
+        onOpenChange={setAddModelsOpen}
+        providerName={provider.name}
+        effectivePrefix={effectivePrefix}
+        existingModelIDs={models.map((m) => m.id)}
+        onSuccess={() => {
+          void refetch()
+          void queryClient.invalidateQueries({ queryKey: ["providers"] })
+        }}
       />
     </div>
   )

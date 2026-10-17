@@ -15,6 +15,9 @@ use crate::infrastructure::database::providers::{CustomProviderRow, ProviderConn
 pub struct ProviderEntry {
     pub id: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub prefix: Option<String>,
     pub category: String,
     pub protocol: ProviderProtocol,
     pub default_base_url: String,
@@ -43,6 +46,7 @@ impl ProviderEntry {
         Self {
             id: metadata.id.to_owned(),
             name: metadata.name.to_owned(),
+            prefix: None,
             category: metadata.category.to_owned(),
             protocol: metadata.protocol,
             default_base_url: metadata.base_url.to_owned(),
@@ -64,6 +68,7 @@ impl ProviderEntry {
         Self {
             id: row.id.clone(),
             name: row.name.clone(),
+            prefix: row.prefix.clone(),
             category: row.category.clone(),
             protocol: ProviderProtocol::parse(&row.protocol),
             default_base_url: row.base_url.clone(),
@@ -146,6 +151,7 @@ pub struct ProviderModel {
     pub owned_by: String,
     pub hidden: bool,
     pub favorite: bool,
+    pub custom: bool,
 }
 
 impl ProviderModel {
@@ -153,6 +159,7 @@ impl ProviderModel {
         model: &ModelObject,
         hidden: &HashSet<String>,
         favorites: &HashSet<String>,
+        custom: &HashSet<String>,
     ) -> Self {
         let normalized = model.id.to_lowercase();
 
@@ -162,6 +169,7 @@ impl ProviderModel {
             owned_by: model.owned_by.clone(),
             hidden: hidden.contains(&normalized),
             favorite: favorites.contains(&normalized),
+            custom: custom.contains(&normalized),
         }
     }
 }

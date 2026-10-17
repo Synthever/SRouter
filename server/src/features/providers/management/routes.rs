@@ -498,7 +498,10 @@ fn require_database(state: &AppState) -> Result<&AppDatabase, APIError> {
 /// Builds the detail entry: the catalog entry plus its connections and models.
 /// Hidden models stay in the list, each carrying the `hidden` flag, so this view
 /// is the only place that reports what an operator hid elsewhere.
-async fn detail_entry(state: &AppState, provider_id: &str) -> Result<ProviderEntry, APIError> {
+pub(super) async fn detail_entry(
+    state: &AppState,
+    provider_id: &str,
+) -> Result<ProviderEntry, APIError> {
     // The models come from the same registry list `/v1/models` serves, unfiltered
     // so a hidden model is still visible, then flagged per entry.
     let models = provider_models(state).await?;
@@ -567,20 +570,18 @@ async fn stored_round_robin(state: &AppState, base_id: &str) -> bool {
     }
 }
 
-/// Every advertised model with its hidden and favorite flags. One flag read
-/// serves the whole list, so the route never queries per model. The operator's
-/// custom models are merged in first, so the detail view shows them the way
-/// `GET /v1/models` and Node's `GetProviderById` do.
+/// Every advertised model with its hidden, favorite, and custom flags. One flag
+/// read serves the whole list, so the route never queries per model. The
+/// operator's custom models are merged in first, so the detail view shows them
+/// the way `GET /v1/models` and Node's `GetProviderById` do.
 async fn provider_models(state: &AppState) -> Result<Vec<ProviderModel>, APIError> {
     let (hidden, favorites) = catalog_flags(state).await?;
-    // `merge_custom_models` reports which ids are custom, but the detail view
-    // carries no `custom` flag, so the return value is not needed here.
     let mut models = state.providers.list_models();
-    merge_custom_models(state, &mut models).await;
+    let custom = merge_custom_models(state, &mut models).await;
 
     Ok(models
         .iter()
-        .map(|model| ProviderModel::from_model(model, &hidden, &favorites))
+        .map(|model| ProviderModel::from_model(model, &hidden, &favorites, &custom))
         .collect())
 }
 

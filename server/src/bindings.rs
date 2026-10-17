@@ -62,17 +62,21 @@ use crate::features::admin_auth::routes::{
 };
 use crate::features::api_keys::routes::{APIKeyResponse, CreatedAPIKeyResponse, KeyListResponse};
 use crate::features::api_keys::{CreateAPIKeyInput, UpdateAPIKeyInput};
-use crate::features::catalog::models::{CatalogModel, ModelListResponse};
+use crate::features::catalog::models::{
+    CatalogModel, CreateModelInput, DeleteModelResponse, ModelListResponse,
+};
 use crate::features::catalog::pricing::PricingListResponse;
 use crate::features::catalog::quota::QuotaResponse;
 use crate::features::database_transfer::routes::DatabaseImportResponse;
 use crate::features::logs::{LiveEvent, LogsResponse};
-use crate::features::providers::management::VerifyResponse;
 use crate::features::providers::management::model::{
     CatalogResponse, GroupedCatalog, ProviderConnectionView, ProviderEntry, ProviderModel,
     ProviderStatus,
 };
 use crate::features::providers::management::routes::ProviderListResponse;
+use crate::features::providers::management::{
+    AddProviderConnectionsInput, CreateCustomProviderInput, VerifyResponse,
+};
 use crate::features::providers::model::ProviderProtocol;
 use crate::features::providers::quota::{LiveModelQuotaItem, ProviderQuotaAccount};
 use crate::features::settings::{SettingsResponse, SystemResponse, UpdateSettingsInput};
@@ -106,6 +110,8 @@ pub fn types() -> Types {
         .register::<CreatedAPIKeyResponse>()
         .register::<KeyListResponse>()
         .register::<CatalogModel>()
+        .register::<CreateModelInput>()
+        .register::<DeleteModelResponse>()
         .register::<ModelListResponse>()
         .register::<PricingListResponse>()
         .register::<QuotaResponse>()
@@ -119,6 +125,8 @@ pub fn types() -> Types {
         .register::<CatalogResponse>()
         .register::<GroupedCatalog>()
         .register::<ProviderProtocol>()
+        .register::<CreateCustomProviderInput>()
+        .register::<AddProviderConnectionsInput>()
         .register::<VerifyResponse>()
         .register::<LogsResponse>()
         .register::<RequestLog>()

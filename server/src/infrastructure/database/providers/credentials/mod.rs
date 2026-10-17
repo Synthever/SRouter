@@ -38,7 +38,10 @@ pub use codex::{
     CodexConnectionWrite, CodexCredentials, load_codex_credentials, update_codex_tokens,
     upsert_codex_connection,
 };
-pub use custom::{CustomCredentials, load_custom_credentials};
+pub use custom::{
+    CustomCredentialCandidate, CustomCredentials, load_custom_credential_candidates,
+    load_custom_credentials,
+};
 pub use grok_web::{
     GrokWebConnectionWrite, GrokWebCredentials, load_grok_web_credentials,
     upsert_grok_web_connection,
@@ -114,7 +117,9 @@ pub async fn load_connection_accounts(
 }
 
 /// The account a credential belongs to, lowercased so two spellings of one
-/// address match. `None` when the store names no account.
+/// address match. When no explicit user/account/email is present, an `api_key`
+/// is fingerprinted with SHA-256 so duplicate API keys across connections of one
+/// provider are detected without exposing the raw secret.
 ///
 /// The row label is deliberately not a fallback: `grok-web` labels every one of
 /// its accounts "Grok Web", so a label match would report unrelated accounts as
@@ -128,6 +133,13 @@ fn account_identity(object: &serde_json::Map<String, Value>) -> Option<String> {
         .and_then(|data| credential_string(data, ACCOUNT_IDENTITY_KEYS))
         .or_else(|| credential_string(object, ACCOUNT_IDENTITY_KEYS))
         .map(|identity| identity.to_lowercase())
+        .or_else(|| {
+            use sha2::Digest;
+
+            let api_key = credential_string(object, &["api_key", "apiKey"])?;
+            let digest = sha2::Sha256::digest(api_key.as_bytes());
+            Some(format!("sha256:{}", hex::encode(digest)))
+        })
 }
 
 /// When a stored access token stops working, under any spelling.
@@ -180,8 +192,17 @@ mod tests {
     }
 
     #[test]
-    fn a_credential_that_names_no_account_has_no_identity() {
-        assert!(account_identity(&object(json!({"api_key": "sk-test"}))).is_none());
+    fn an_api_key_credential_is_fingerprinted_with_sha256() {
+        let first = account_identity(&object(json!({"api_key": "sk-test"}))).expect("fingerprint");
+        let second =
+            account_identity(&object(json!({"apiKey": "  sk-test  "}))).expect("fingerprint");
+        let different =
+            account_identity(&object(json!({"api_key": "sk-other"}))).expect("fingerprint");
+
+        assert!(first.starts_with("sha256:"));
+        assert!(!first.contains("sk-test"));
+        assert_eq!(first, second);
+        assert_ne!(first, different);
         assert!(account_identity(&object(json!({}))).is_none());
     }
 
