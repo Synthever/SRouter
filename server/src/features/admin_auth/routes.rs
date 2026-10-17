@@ -203,12 +203,16 @@ async fn admin_change_password(
     }
 
     let body = json_body(request, constants::common::INVALID_PAYLOAD).await?;
-    let (current, new_password, confirmation) = parse_change_password(&body)?;
+    let ChangePasswordInput {
+        current_password,
+        new_password,
+        confirmation,
+    } = parse_change_password(&body)?;
 
     let stored = state.security.admin_auth.get_password_hash().await?;
     if !stored
         .as_deref()
-        .is_some_and(|hash| verify_admin_password(&current, hash))
+        .is_some_and(|hash| verify_admin_password(&current_password, hash))
     {
         return Err(
             APIError::new(401, constants::admin::CURRENT_PASSWORD_INCORRECT)
@@ -337,7 +341,7 @@ fn parse_setup(value: &Value) -> Result<AdminSetupInput, APIError> {
     })
 }
 
-fn parse_change_password(value: &Value) -> Result<(String, String, String), APIError> {
+fn parse_change_password(value: &Value) -> Result<ChangePasswordInput, APIError> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid_password(constants::admin::CURRENT_PASSWORD_REQUIRED))?;
@@ -358,7 +362,11 @@ fn parse_change_password(value: &Value) -> Result<(String, String, String), APIE
         constants::admin::PASSWORD_CONFIRMATION_REQUIRED,
     )?;
 
-    Ok((current, new_password, confirmation))
+    Ok(ChangePasswordInput {
+        current_password: current,
+        new_password,
+        confirmation,
+    })
 }
 
 fn parse_login(value: &Value) -> Option<AdminLoginInput> {
