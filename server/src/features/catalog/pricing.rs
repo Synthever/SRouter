@@ -206,21 +206,39 @@ pub struct CostBreakdown {
     pub total: f64,
 }
 
+/// Suffixes a driver appends to a model id models.dev does not carry: an effort
+/// tier (`gemini-3.8-flash-high` serves `gemini-3.8-flash`), a reasoning variant
+/// (`claude-opus-4-6-thinking` serves `claude-opus-4-6`), or the free tier of a
+/// paid model (`step-5-preview-free` serves `step-5-preview`). Pricing is keyed
+/// by the catalog id, so the suffix has to come off before the lookup.
+const VARIANT_SUFFIXES: &[&str] = &["-high", "-medium", "-low", "-thinking", "-free"];
+
+/// The catalog rate for a model id, trying the id as sent, its bare form without
+/// the provider prefix (`openai/gpt-4o` -> `gpt-4o`), then each of those with a
+/// [`VARIANT_SUFFIXES`] suffix removed. An exact catalog entry always wins, so a
+/// model that is only sold in a variant (`deepseek-v3.2-thinking`, `space-bunny-free`)
+/// keeps its own rate instead of borrowing its base's.
+fn lookup_cost(model_id: &str) -> Option<ModelPricingCost> {
+    let normalized = model_id.trim().to_lowercase();
+    let bare = normalized.split_once('/').map(|(_, rest)| rest);
+
+    [Some(normalized.as_str()), bare]
+        .into_iter()
+        .flatten()
+        .find_map(|key| {
+            CATALOG.cost_map.get(key).copied().or_else(|| {
+                VARIANT_SUFFIXES
+                    .iter()
+                    .find_map(|suffix| CATALOG.cost_map.get(key.strip_suffix(suffix)?).copied())
+            })
+        })
+}
+
 /// Estimates detailed token cost breakdown in USD for a model and usage breakdown.
 ///
 /// Returns `None` if the model rate is unpriced or unknown.
 pub fn estimate_cost_breakdown(model_id: &str, usage: &UsageBreakdown) -> Option<CostBreakdown> {
-    let normalized = model_id.trim().to_lowercase();
-
-    let cost = CATALOG
-        .cost_map
-        .get(&normalized)
-        .or_else(|| {
-            // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o", "zen/...", etc.)
-            let bare = normalized.split_once('/').map(|(_, rest)| rest)?;
-            CATALOG.cost_map.get(bare)
-        })
-        .copied()?;
+    let cost = lookup_cost(model_id)?;
 
     // If cost has neither input nor output rate defined, consider it unpriced.
     if cost.input.is_none() && cost.output.is_none() {
@@ -275,7 +293,20 @@ pub fn context_limit(model_id: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use crate::features::providers::antigravity::ANTIGRAVITY_MODEL_IDS;
+
     use super::*;
+
+    fn usage(prompt_tokens: i64, completion_tokens: i64) -> UsageBreakdown {
+        UsageBreakdown {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            cached_tokens: 0,
+            cache_creation_tokens: 0,
+            reasoning_tokens: 0,
+        }
+    }
 
     #[test]
     fn pricing_catalog_loads_and_has_elements() {
@@ -305,5 +336,93 @@ mod tests {
         // Let's test with a real model or estimate_cost logic
         let cost = estimate_cost("unknown-model-xyz", &usage);
         assert_eq!(cost, None);
+    }
+
+    /// The reported bug: an effort tier the catalog does not carry used to price
+    /// as unknown, so real usage showed up as $0.00 on the dashboard.
+    #[test]
+    fn a_driver_variant_prices_like_the_model_it_serves() {
+        let usage = usage(1_000_000, 500_000);
+
+        for (variant, base) in [
+            ("gemini-3.8-flash-high", "gemini-3.8-flash"),
+            ("gemini-3.8-flash-medium", "gemini-3.8-flash"),
+            ("gemini-3.8-flash-low", "gemini-3.8-flash"),
+            ("gemini-3.7-flash-high", "gemini-3.7-flash"),
+            ("gemini-3.5-flash-low", "gemini-3.5-flash"),
+            ("gemini-3.1-pro-high", "gemini-3.1-pro"),
+            ("claude-opus-4-6-thinking", "claude-opus-4-6"),
+            ("gpt-oss-120b-medium", "gpt-oss-120b"),
+        ] {
+            let cost = estimate_cost(variant, &usage);
+            assert!(cost.is_some(), "{variant} must be priced");
+            assert_eq!(cost, estimate_cost(base, &usage), "{variant} vs {base}");
+        }
+    }
+
+    #[test]
+    fn the_provider_prefix_does_not_change_the_estimate() {
+        let usage = usage(1_000, 500);
+
+        assert_eq!(
+            estimate_cost("antigravity/gemini-3.8-flash-high", &usage),
+            estimate_cost("gemini-3.8-flash-high", &usage)
+        );
+    }
+
+    /// A model sold only as a variant keeps its own rate: the catalog's `-free`
+    /// rows are all zero, and reading them as their paid base would bill a
+    /// request that costs nothing.
+    #[test]
+    fn an_exact_catalog_entry_outranks_its_stripped_base() {
+        let usage = usage(1_000_000, 0);
+
+        assert_eq!(estimate_cost("mimo-v2.6-flash-free", &usage), Some(0.0));
+        assert_eq!(estimate_cost("space-bunny-free", &usage), Some(0.0));
+        assert!(
+            estimate_cost("mimo-v2.6-flash", &usage).is_some_and(|cost| cost > 0.0),
+            "the paid sibling still prices above zero"
+        );
+    }
+
+    /// A `-free` id models.dev has not listed yet bills at its paid base rate.
+    #[test]
+    fn an_unlisted_free_tier_is_priced_at_its_paid_base() {
+        let usage = usage(1_000_000, 500_000);
+
+        for (free, base) in [
+            ("step-5-preview-free", "step-5-preview"),
+            ("deepseek-v4.1-flash-free", "deepseek-v4.1-flash"),
+        ] {
+            let cost = estimate_cost(free, &usage);
+            assert!(cost.is_some_and(|cost| cost > 0.0), "{free} must be priced");
+            assert_eq!(cost, estimate_cost(base, &usage), "{free} vs {base}");
+        }
+    }
+
+    /// Every id the antigravity driver advertises carries a tier, a reasoning
+    /// variant, or the plain base id, so an unpriced one is the dashboard's $0.00.
+    #[test]
+    fn every_antigravity_model_id_is_priced() {
+        let usage = usage(1_000, 500);
+
+        let unpriced: Vec<&str> = ANTIGRAVITY_MODEL_IDS
+            .iter()
+            .copied()
+            .filter(|id| estimate_cost(id, &usage).is_none())
+            .collect();
+
+        assert!(
+            unpriced.is_empty(),
+            "unpriced antigravity ids: {unpriced:?}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_variant_stays_unpriced() {
+        let usage = usage(1_000, 500);
+
+        assert_eq!(estimate_cost("no-such-model-high", &usage), None);
+        assert_eq!(estimate_cost("no-such-model-free", &usage), None);
     }
 }

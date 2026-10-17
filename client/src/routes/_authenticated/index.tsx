@@ -13,6 +13,7 @@ import {
   type LineChartSeries,
 } from "@/components/arc/line-chart/line-chart"
 import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
+import { Skeleton } from "@/components/arc/skeleton/skeleton"
 import {
   SortableDataTable,
   type DataColumn,
@@ -344,134 +345,146 @@ function OverviewPage() {
           >
             {/* Core KPI metrics in a streamlined card */}
             <div className="flex flex-col justify-between rounded-[var(--radius-surface)] border border-border bg-card p-4 shadow-[var(--shadow-resting)] sm:p-5 lg:col-span-7">
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Requests
+              {/* The figures used to render as `0` until the window arrived,
+                  which read as a correction a moment later. */}
+              {isPending ? (
+                <Skeleton label="Loading gateway totals" lines={3} />
+              ) : (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Requests
+                    </div>
+                    <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                      {totalRequests.toLocaleString()}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      past {range}
+                    </div>
                   </div>
-                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
-                    {totalRequests.toLocaleString()}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    past {range}
-                  </div>
-                </div>
 
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">
-                    P95 Latency
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      P95 Latency
+                    </div>
+                    <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                      {latencyP95}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">
+                        ms
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      upstream time
+                    </div>
                   </div>
-                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
-                    {latencyP95}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      ms
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    upstream time
-                  </div>
-                </div>
 
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Error Rate
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Error Rate
+                    </div>
+                    <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                      {errorRate.toFixed(1)}
+                      <span className="text-xs font-normal text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      failures
+                    </div>
                   </div>
-                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
-                    {errorRate.toFixed(1)}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      %
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    failures
-                  </div>
-                </div>
 
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Est. Spend
-                  </div>
-                  <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
-                    ${windowCost.toFixed(2)}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    past {range}
+                  <div>
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Est. Spend
+                    </div>
+                    <div className="mt-1 text-lg font-medium text-foreground tabular-nums">
+                      ${windowCost.toFixed(2)}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      past {range}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Token Traffic & Cache Efficiency breakdown */}
             <div className="flex flex-col justify-between rounded-[var(--radius-surface)] border border-border bg-card p-4 shadow-[var(--shadow-resting)] sm:p-5 lg:col-span-5">
-              <div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                    <Zap
-                      size={13}
-                      className="text-foreground"
-                      aria-hidden="true"
-                    />
-                    <span>Token Throughput</span>
+              {isPending ? (
+                <Skeleton label="Loading token totals" lines={3} />
+              ) : (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        <Zap
+                          size={13}
+                          className="text-foreground"
+                          aria-hidden="true"
+                        />
+                        <span>Token Throughput</span>
+                      </div>
+                      <span className="text-xs font-medium text-foreground tabular-nums">
+                        {tokenTotals.total.toLocaleString()} total
+                      </span>
+                    </div>
+
+                    {/* Ratio bar */}
+                    <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+                      <div
+                        style={{
+                          width: `${tokenTotals.total > 0 ? (tokenTotals.prompt / tokenTotals.total) * 100 : 0}%`,
+                        }}
+                        className="bg-foreground transition-all duration-300"
+                        title={`Input: ${tokenTotals.prompt.toLocaleString()}`}
+                      />
+                      <div
+                        style={{
+                          width: `${tokenTotals.total > 0 ? (tokenTotals.completion / tokenTotals.total) * 100 : 0}%`,
+                        }}
+                        className="bg-muted-foreground/60 transition-all duration-300"
+                        title={`Output: ${tokenTotals.completion.toLocaleString()}`}
+                      />
+                    </div>
                   </div>
-                  <span className="text-xs font-medium text-foreground tabular-nums">
-                    {tokenTotals.total.toLocaleString()} total
-                  </span>
-                </div>
 
-                {/* Ratio bar */}
-                <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-                  <div
-                    style={{
-                      width: `${tokenTotals.total > 0 ? (tokenTotals.prompt / tokenTotals.total) * 100 : 0}%`,
-                    }}
-                    className="bg-foreground transition-all duration-300"
-                    title={`Input: ${tokenTotals.prompt.toLocaleString()}`}
-                  />
-                  <div
-                    style={{
-                      width: `${tokenTotals.total > 0 ? (tokenTotals.completion / tokenTotals.total) * 100 : 0}%`,
-                    }}
-                    className="bg-muted-foreground/60 transition-all duration-300"
-                    title={`Output: ${tokenTotals.completion.toLocaleString()}`}
-                  />
-                </div>
-              </div>
+                  {/* Details & Cache stats */}
+                  <div className="mt-3.5 flex flex-wrap items-center justify-between gap-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1">
+                        <span
+                          className="size-1.5 rounded-full bg-foreground"
+                          aria-hidden="true"
+                        />
+                        <span>In:</span>
+                        <strong className="font-medium text-foreground tabular-nums">
+                          {tokenTotals.prompt.toLocaleString()}
+                        </strong>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span
+                          className="size-1.5 rounded-full bg-muted-foreground/60"
+                          aria-hidden="true"
+                        />
+                        <span>Out:</span>
+                        <strong className="font-medium text-foreground tabular-nums">
+                          {tokenTotals.completion.toLocaleString()}
+                        </strong>
+                      </span>
+                    </div>
 
-              {/* Details & Cache stats */}
-              <div className="mt-3.5 flex flex-wrap items-center justify-between gap-y-1.5 border-t border-border pt-3 text-xs text-muted-foreground">
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="size-1.5 rounded-full bg-foreground"
-                      aria-hidden="true"
-                    />
-                    <span>In:</span>
-                    <strong className="font-medium text-foreground tabular-nums">
-                      {tokenTotals.prompt.toLocaleString()}
-                    </strong>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span
-                      className="size-1.5 rounded-full bg-muted-foreground/60"
-                      aria-hidden="true"
-                    />
-                    <span>Out:</span>
-                    <strong className="font-medium text-foreground tabular-nums">
-                      {tokenTotals.completion.toLocaleString()}
-                    </strong>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <span>Cache Hit:</span>
-                  <Badge
-                    tone={tokenTotals.hitRate > 0 ? "success" : "neutral"}
-                    size="sm"
-                  >
-                    {tokenTotals.hitRate.toFixed(1)}%
-                  </Badge>
-                </div>
-              </div>
+                    <div className="flex items-center gap-1">
+                      <span>Cache Hit:</span>
+                      <Badge
+                        tone={tokenTotals.hitRate > 0 ? "success" : "neutral"}
+                        size="sm"
+                      >
+                        {tokenTotals.hitRate.toFixed(1)}%
+                      </Badge>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 

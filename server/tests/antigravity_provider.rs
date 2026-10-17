@@ -54,6 +54,17 @@ fn models_request() -> Request<Body> {
     )
 }
 
+fn analytics_request() -> Request<Body> {
+    with_loopback_client(
+        Request::builder()
+            .method("GET")
+            .uri("/v1/logs/analytics?window=1h")
+            .version(Version::HTTP_11)
+            .body(Body::empty())
+            .expect("analytics request"),
+    )
+}
+
 fn chat_body(model: &str, stream: bool) -> serde_json::Value {
     serde_json::json!({
         "model": model,
@@ -535,4 +546,56 @@ async fn a_transient_project_lookup_uses_a_generated_fallback_without_persisting
         credentials.project_id, None,
         "a generated fallback must not be pinned to the connection"
     );
+}
+
+/// The dashboard's Est. cost column sums `estimated_cost` grouped by the id the
+/// client sent, and that id carries the driver's effort tier, so an unpriced tier
+/// showed real usage as $0.00.
+#[tokio::test]
+async fn the_effort_tier_id_is_priced_into_the_request_log() {
+    let database = TestDatabase::new().expect("temporary database");
+    connect_antigravity(&database).await;
+    let fake = FakeAntigravityUpstream::start().await;
+    let app = app(&database, &fake).await;
+
+    let response = app
+        .clone()
+        .oneshot(post(
+            "/v1/chat/completions",
+            chat_body("antigravity/gemini-3.8-flash-high", false),
+        ))
+        .await
+        .expect("gateway response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let pool = database
+        .connect()
+        .await
+        .expect("temporary database")
+        .sqlite_pool()
+        .expect("sqlite pool");
+    let (model, resolved_model, estimated_cost): (String, String, f64) =
+        sqlx::query_as("SELECT model, resolved_model, estimated_cost FROM request_logs")
+            .fetch_one(&pool)
+            .await
+            .expect("logged request");
+    assert_eq!(model, "antigravity/gemini-3.8-flash-high");
+    assert_eq!(resolved_model, "gemini-3.8-flash-high");
+    assert!(
+        estimated_cost > 0.0,
+        "the gemini-3.8-flash tier must log a cost, got {estimated_cost}"
+    );
+
+    let response = app
+        .oneshot(analytics_request())
+        .await
+        .expect("analytics response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["top_models"][0]["model"], model);
+    assert!(
+        body["top_models"][0]["est_cost"].as_f64().unwrap_or(0.0) > 0.0,
+        "the top-models row of the dashboard must carry the cost: {body}"
+    );
+    assert!(body["est_cost"].as_f64().unwrap_or(0.0) > 0.0, "{body}");
 }
