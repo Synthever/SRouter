@@ -1,4 +1,5 @@
-import { Cpu, ChevronDown } from "lucide-react"
+import { Link } from "@tanstack/react-router"
+import { ChevronDown, Cpu } from "lucide-react"
 
 import type { UsageByModel } from "@/api/types"
 import { Badge } from "@/components/arc/badge/badge"
@@ -102,12 +103,30 @@ export function ModelUsageSection({
                         }`}
                         aria-hidden="true"
                       />
-                      <span className="truncate font-mono text-xs font-medium text-foreground">
-                        {row.model}
-                      </span>
-                      <Badge tone="neutral" size="sm" className="shrink-0">
-                        {row.provider}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-mono text-xs font-medium text-foreground">
+                          {row.model}
+                        </span>
+                        {row.provider !== "default" ? (
+                          <Link
+                            to="/providers/$providerId"
+                            params={{ providerId: row.provider }}
+                            className="group/badge relative z-20 inline-flex shrink-0 rounded-[var(--radius-pill)] transition-transform duration-150 ease-out focus-visible:ring-1 focus-visible:ring-foreground focus-visible:outline-none active:scale-95"
+                          >
+                            <Badge
+                              tone="neutral"
+                              size="sm"
+                              className="cursor-pointer transition-colors group-hover/badge:border-foreground/30 group-hover/badge:bg-surface-muted"
+                            >
+                              {row.provider}
+                            </Badge>
+                          </Link>
+                        ) : (
+                          <Badge tone="neutral" size="sm" className="shrink-0">
+                            {row.provider}
+                          </Badge>
+                        )}
+                      </div>
                     </span>
                     <span className="shrink-0 text-xs font-medium text-foreground tabular-nums">
                       {metric === "cost"

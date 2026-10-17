@@ -5,11 +5,38 @@ import { request } from "./client"
 import type {
   AnalyticsReport,
   LiveEvent,
+  LogsResponse,
   RequestLog,
   UsageStatsReport,
 } from "./types"
 
 export type AnalyticsWindow = "1h" | "24h" | "7d" | "30d"
+
+export interface LogsQueryParams {
+  page?: number
+  limit?: number
+  status?: "error" | "success"
+}
+
+/**
+ * `GET /v1/logs`. Paginated request log audit trail recorded in SQLite.
+ */
+export function logsQuery(params: LogsQueryParams = {}) {
+  const { page = 1, limit = 50, status } = params
+  const search = new URLSearchParams()
+  search.set("page", String(page))
+  search.set("limit", String(limit))
+  if (status) {
+    search.set("status", status)
+  }
+
+  return queryOptions({
+    queryKey: ["logs", "list", { page, limit, status }] as const,
+    queryFn: ({ signal }) =>
+      request<LogsResponse>(`/v1/logs?${search.toString()}`, { signal }),
+    staleTime: 10_000,
+  })
+}
 
 /**
  * `GET /v1/logs/stats`. All-time usage totals, also carried by `usage.updated`
