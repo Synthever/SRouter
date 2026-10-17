@@ -28,10 +28,10 @@ client/src/
 │   ├── _authenticated/
 │   │   ├── index.tsx        "/" — overview dashboard (wired: analyticsQuery, SSE useLogEvents)
 │   │   ├── keys.tsx         API keys — STATIC MOCKUP (hardcoded fake keys)
-│   │   ├── logs.tsx         request logs — STATIC MOCKUP
+│   │   ├── logs.tsx         request logs (wired: logsQuery, SSE useLogEvents, LogDetailSheet)
 │   │   ├── providers/       providers management (wired: providersListQuery, providerDetailQuery)
 │   │   ├── settings.tsx     settings — STATIC MOCKUP
-│   │   └── usage.tsx        usage/quota — STATIC MOCKUP (hardcoded token counts)
+│   │   └── usage.tsx        usage/quota (wired: analyticsQuery, usageStatsQuery, keyListQuery)
 │   └── login.tsx            "/login" — setup + sign-in (wired)
 ├── hooks/
 │   └── useClipboard.ts      mandatory hook for copy/clipboard access (wraps Arc useCopyFeedback, adds paste)

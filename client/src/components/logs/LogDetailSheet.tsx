@@ -5,7 +5,7 @@ import type { RequestLog } from "@/api/types"
 import { Badge } from "@/components/arc/badge/badge"
 import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { CopyButton } from "@/components/arc/copy-button/copy-button"
-import { formatTime, LATENCY, NUMBER, statusTone } from "./types"
+import { formatTime, isSuccessStatus, LATENCY, NUMBER, statusTone } from "./types"
 
 export interface LogDetailSheetProps {
   log: RequestLog | null
@@ -13,7 +13,7 @@ export interface LogDetailSheetProps {
 }
 
 export function LogDetailSheet({ log, onClose }: LogDetailSheetProps) {
-  const isSuccess = log ? log.status_code < 400 : true
+  const isSuccess = log ? isSuccessStatus(log.status_code) : true
   const tone = log ? statusTone(log.status_code) : "neutral"
 
   return (
@@ -148,11 +148,9 @@ export function LogDetailSheet({ log, onClose }: LogDetailSheetProps) {
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Cached</dt>
+                <dt className="text-muted-foreground">Cache read</dt>
                 <dd className="mt-0.5 font-medium text-foreground tabular-nums">
-                  {NUMBER.format(
-                    log.tokens.cache ?? log.tokens.cache_read ?? 0
-                  )}
+                  {NUMBER.format(log.tokens.cache_read ?? 0)}
                 </dd>
               </div>
               <div>

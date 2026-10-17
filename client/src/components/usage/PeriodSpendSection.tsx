@@ -47,7 +47,7 @@ export function PeriodSpendSection({
       >
         <EmptyState
           title="Could not load this period"
-          description={`The analytics endpoint did not answer (${error instanceof Error ? error.message : "unknown error"}). Lifetime totals and key quota below come from different endpoints and may still be current.`}
+          description={`The analytics endpoint did not answer (${error?.message ?? "no error detail"}). Lifetime totals and key quota below come from different endpoints and may still be current.`}
           action={
             <ActionButton
               label="Retry"

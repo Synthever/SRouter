@@ -3,7 +3,7 @@ import { useCallback, useState } from "react"
 
 import { logsQuery, useLogEvents } from "@/api/logs"
 import type { RequestLog } from "@/api/types"
-import type { LogStatusFilter } from "../types"
+import { isSuccessStatus, type LogStatusFilter } from "../types"
 
 export default function useLogsData() {
   const [page, setPage] = useState(1)
@@ -49,9 +49,8 @@ export default function useLogsData() {
           logsQuery({ page: 1, limit, status: apiStatus }).queryKey,
           (prev) => {
             if (!prev) return prev
-            // Server classifies success as status_code >= 200 && status_code < 300, anything else as error
-            const isSuccess =
-              newLog.status_code >= 200 && newLog.status_code < 300
+            // Server classifies a row as success only when it is 2xx.
+            const isSuccess = isSuccessStatus(newLog.status_code)
             const isMatch =
               statusFilter === "all" ||
               (statusFilter === "success" && isSuccess) ||
@@ -85,7 +84,8 @@ export default function useLogsData() {
   })
 
   async function refresh() {
-    await query.refetch()
+    const result = await query.refetch()
+    if (result.isError) throw new Error("logs refresh failed")
   }
 
   function handleFilterChange(newFilter: LogStatusFilter) {

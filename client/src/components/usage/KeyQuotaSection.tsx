@@ -60,7 +60,7 @@ export function KeyQuotaSection({
     >
       {/* Responsive toolbar header: stack on mobile, inline on tablet/laptop/desktop */}
       <div className="flex flex-col gap-3 border-b border-border pb-3.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <KeyRound
             size={16}
             className="shrink-0 text-foreground"
@@ -73,11 +73,7 @@ export function KeyQuotaSection({
             ({filteredKeys.length})
           </span>
           {nearCount > 0 && keyFilter !== "near" && (
-            <Badge
-              tone="warning"
-              size="sm"
-              className="xs:inline-flex hidden items-center gap-1"
-            >
+            <Badge tone="warning" size="sm" className="inline-flex items-center gap-1">
               <ShieldAlert size={12} aria-hidden="true" />
               {nearCount} near limit
             </Badge>
@@ -114,7 +110,7 @@ export function KeyQuotaSection({
         <div className="pt-4">
           <EmptyState
             title="Could not load key quota"
-            description={`The key list did not answer (${error instanceof Error ? error.message : "unknown error"}). The keys screen owns mutations; this panel only reads what each key has consumed.`}
+            description={`The key list did not answer (${error?.message ?? "no error detail"}). The keys screen owns mutations; this panel only reads what each key has consumed.`}
             action={
               <ActionButton
                 label="Retry"
