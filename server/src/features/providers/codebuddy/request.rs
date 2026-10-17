@@ -69,6 +69,14 @@ impl CodeBuddyExecutor {
         headers.insert("Content-Type", "application/json".to_owned());
         headers.insert("Authorization", bearer_token(&credentials.access_token));
 
+        // Upstream channel verification requires conversation and request identifiers.
+        let conversation_id = uuid::Uuid::new_v4().to_string();
+        let request_id = uuid::Uuid::new_v4().simple().to_string();
+        headers.insert("X-Conversation-ID", conversation_id);
+        headers.insert("X-Conversation-Request-ID", request_id.clone());
+        headers.insert("X-Conversation-Message-ID", request_id.clone());
+        headers.insert("X-Request-ID", request_id);
+
         Ok(PreparedRequest {
             url: self.endpoints.chat_url.clone(),
             model_key,
