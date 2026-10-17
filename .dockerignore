@@ -1,37 +1,16 @@
-# Version control
+# The context is sent to the daemon before the build starts. `server/target` is
+# 14 GB and `client/node_modules` 557 MB; without these two lines every build
+# transfers them first.
+server/target
+client/node_modules
+client/dist
+
+# Nothing below is compile-time input for either stage.
 .git
-.gitignore
-
-# Package manager and cache
-node_modules
-.pnpm-store
-.turbo
-
-# Build outputs
-**/dist
-apps/web/dist
-apps/api/dist
-packages/*/dist
-
-# Databases & local persistent files
-*.db
-*.db-shm
-*.db-wal
-data/
-
-# Environment files
+.github
+.superpowers
+.freebuff
+server/logs
+logs
 .env
-.env.*
-!.env.example
-
-# IDE / Assistant / Logs
-.claude
-.codegraph
-.vscode
-.idea
 *.log
-npm-debug.log*
-pnpm-debug.log*
-
-# Testing & coverage
-coverage

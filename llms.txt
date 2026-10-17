@@ -1,0 +1,70 @@
+# SRouter
+
+> SRouter is a self-hosted LLM gateway: one OpenAI- and Anthropic-compatible endpoint in front of the provider accounts you already pay for (Claude Code, OpenAI Codex, Qoder, Cline, Grok Web, CodeBuddy global/CN, Google Antigravity, OpenCode Zen).
+
+Two halves in one repository: `server/` is a Rust/Axum gateway with SQLite storage, `client/` is a React 19 dashboard (Bun, Vite, TanStack Router/Query, Tailwind v4). They share only TypeScript generated from the Rust wire types. No Postgres, no Redis, no queue, no workspace root manifest.
+
+Branch note: this file describes the tree on `feat/api-rust-migration` (PR #155), which is what the paths below refer to. Until that PR merges, replace `main` with `feat/api-rust-migration` in the URLs.
+
+## Start here
+
+- [README](https://github.com/seaavey/SRouter/blob/main/README.md): human entry point: quick start, client examples, API table, dashboard, troubleshooting.
+- [README (Indonesian)](https://github.com/seaavey/SRouter/blob/main/README-id.md): the same document in Bahasa Indonesia.
+- [AGENTS.md](https://github.com/seaavey/SRouter/blob/main/AGENTS.md): contributor rules for AI agents: architecture, non-negotiable invariants, conventions, verification expectations.
+- [CONTRIBUTING.md](https://github.com/seaavey/SRouter/blob/main/CONTRIBUTING.md): build, test, bindings, commit conventions.
+- [SECURITY.md](https://github.com/seaavey/SRouter/blob/main/SECURITY.md): where credentials live, what counts as a vulnerability, private reporting channel.
+
+## Source map
+
+- [server/src/app.rs](https://github.com/seaavey/SRouter/blob/main/server/src/app.rs): the only router assembly; every guard is applied per mount.
+- [server/src/features/](https://github.com/seaavey/SRouter/tree/main/server/src/features): one directory per feature: gateway, providers, catalog, logs, api_keys, admin_auth, provider_auth, database_transfer.
+- [server/src/constants.rs](https://github.com/seaavey/SRouter/blob/main/server/src/constants.rs): every client-facing message, error code, error type, and header name.
+- [server/src/http/](https://github.com/seaavey/SRouter/tree/main/server/src/http): middleware (api key, admin session, rate limit, csrf, cors, body limit, access log, security headers), listeners, static files.
+- [server/src/infrastructure/](https://github.com/seaavey/SRouter/tree/main/server/src/infrastructure): SQLite handle, migrations, stores, upstream client, telemetry.
+- [server/migrations/](https://github.com/seaavey/SRouter/tree/main/server/migrations): schema history, currently version 4.
+- [server/tests/](https://github.com/seaavey/SRouter/tree/main/server/tests): integration suites; each builds its own temporary database and fake upstreams.
+- [server/bindings.ts](https://github.com/seaavey/SRouter/blob/main/server/bindings.ts): generated TypeScript view of the wire types; a byte-identical copy lives at `client/src/generated/typed.ts`.
+- [client/src/routes/](https://github.com/seaavey/SRouter/tree/main/client/src/routes): TanStack file routes: `/login`, `/` overview, `/providers`, `/providers/$providerId`, `/logs`, `/usage`, `/keys`, `/settings`.
+- [skills/srouter-server/SKILL.md](https://github.com/seaavey/SRouter/blob/main/skills/srouter-server/SKILL.md) and [skills/srouter-frontend/SKILL.md](https://github.com/seaavey/SRouter/blob/main/skills/srouter-frontend/SKILL.md): deep-dive notes per half.
+
+## Run it
+
+- From source: `cargo run --manifest-path server/Cargo.toml` (stable Rust, edition 2024). Listens on `127.0.0.1:3000`, database at `~/.srouter/srouter.db`.
+- Docker: `SROUTER_ADMIN_PASSWORD=... docker compose up -d`. Serves API and dashboard on `:3000`, database at `~/.srouter/srouter.db` (mounted to `/data`).
+- Dashboard only: `cd client && bun install && bun run dev` (Vite on `:5173`, proxies `/v1` to the server).
+
+## API surface
+
+- Gateway: `POST /v1/chat/completions` (aliases `/v1/chat`, `/v1/chat/completion`), `POST /v1/messages`, `POST /v1/messages/count_tokens`, `POST /v1/images/generations`. SSE streaming; a provider failure mid-stream is an SSE error event, never a dropped connection.
+- Read: `GET /v1/models`, `/v1/models/{*model}`, `/v1/models/pricing`, `/v1/providers`, `/v1/providers/catalog`, `/v1/providers/{id}`, `/v1/logs` (+ `/{id}`, `/stats`, `/analytics`, `/events`), `/v1/quota` (alias `/v1/qouta`), `/v1/settings`.
+- Operator (admin session + CSRF): model writes under `/v1/models/{*model}`, `PATCH /v1/providers/{id}`, `PATCH /v1/providers/{id}/round-robin`, custom providers (`POST|DELETE /v1/providers`, `/v1/providers/verify`, `/v1/providers/connections/verify`), `/v1/keys` CRUD plus `/v1/keys/{id}/credit`, `POST|PATCH /v1/settings`, `/v1/admin/{status,setup,login,logout,change-password}`, `/v1/admin/database/{export,import}`.
+- OAuth: `/v1/auth/{qoder,cline,codebuddy,codebuddy-cn,grok-web,openai,antigravity,claude}/...` (admin session to start, callbacks public).
+- Errors: OpenAI envelope `{"error": {"message", "type", "code", "param"}}`.
+
+## Invariants an agent must not break
+
+- SQLite is the only backend. A configured `DATABASE_URL` is refused at boot, permanently.
+- Production is the only mode the binary boots; `NODE_ENV=development` is refused.
+- All client-visible strings, error codes, and header names come from `server/src/constants.rs`; never inline them in a handler.
+- Wire fields are snake_case in both directions, and `client/` depends on it. A Rust type change is a wire contract change: run `cargo run --manifest-path server/Cargo.toml --bin export_ts` and commit both generated copies.
+- Guards are applied per mount in `server/src/app.rs`; global layer order and the frozen response headers are deliberate.
+- Gateway keys store a sha256 hash plus a display prefix; provider credentials are cleartext in the SQLite file; request logs keep metadata only.
+- Tests must never open `~/.srouter/srouter.db` or reach a real provider.
+- No `TODO`/`FIXME` markers, stubs, or placeholders in `server/src` or `client/src`.
+
+## Verify a change
+
+```
+cargo test --manifest-path server/Cargo.toml --locked
+cargo fmt --manifest-path server/Cargo.toml -- --check
+cargo clippy --manifest-path server/Cargo.toml --all-targets --all-features --locked -- -D warnings
+cd client && bun run typecheck && bun run lint && bun run build
+```
+
+There is no client test runner. Two server suites (`opencode_live.rs`, `qoder_live.rs`) are network-gated and ignored by default.
+
+## Optional
+
+- [docs/api-v1-contract.md](https://github.com/seaavey/SRouter/blob/backup/pre-apps-api-removal/docs/api-v1-contract.md): the owner-approved Node-to-Rust deviation list, preserved on the `backup/pre-apps-api-removal` branch because the tree no longer carries `docs/`.
+- [docs/api-migration.md](https://github.com/seaavey/SRouter/blob/backup/pre-apps-api-removal/docs/api-migration.md): migration status, parity matrix, and the benchmark protocol.
+- The deleted Node monorepo is readable at `backup/pre-apps-api-removal` and `backup/pre-packages-removal`.

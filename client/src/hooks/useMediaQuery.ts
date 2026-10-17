@@ -1,0 +1,22 @@
+import { useSyncExternalStore } from "react"
+
+/**
+ * Tracks whether a media query matches using React's useSyncExternalStore.
+ */
+export default function useMediaQuery(query: string): boolean {
+  const subscribe = (callback: () => void) => {
+    if (typeof window === "undefined") return () => {}
+    const mediaQuery = window.matchMedia(query)
+    mediaQuery.addEventListener("change", callback)
+    return () => mediaQuery.removeEventListener("change", callback)
+  }
+
+  const getSnapshot = () => {
+    if (typeof window === "undefined") return false
+    return window.matchMedia(query).matches
+  }
+
+  const getServerSnapshot = () => false
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+}

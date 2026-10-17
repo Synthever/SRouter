@@ -1,42 +1,100 @@
 name: CI
 
 on:
-    push:
-        branches: [main]
-    pull_request:
-        branches: [main]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new run for the same ref replaces the one in flight: both write the same
+# rust-cache keys, and only the newest commit's verdict matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only reads the repository; the publish workflow holds the
+# packages permission.
+permissions:
+  contents: read
 
 jobs:
-    build-and-test:
-        name: Build & Test
-        runs-on: ubuntu-latest
+  rust-lint:
+    name: Rust Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
-        strategy:
-            matrix:
-                node-version: [22.x, 24.x]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # No step here pushes or fetches; checkout@v7 keeps the token
+          # in $RUNNER_TEMP for the whole job, which this job has no use
+          # for.
+          persist-credentials: false
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        # `stable` matches server/rust-toolchain.toml (the action selects
+        # the toolchain from its own ref); the components add the two
+        # tools the checks below need.
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@v4
-              # No explicit version: pnpm/action-setup reads the
-              # `packageManager` field from package.json (pnpm@11.20.0).
-              # Pinning `version: 11` here conflicts with package.json and
-              # makes the action fail with "Multiple versions of pnpm specified".
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
 
-            - name: Setup Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v4
-              with:
-                  node-version: ${{ matrix.node-version }}
-                  cache: "pnpm"
+      # The cargo steps run with `working-directory: server` rather than
+      # `--manifest-path`: rustup resolves an override file from the
+      # current directory, so this is what makes server/rust-toolchain.toml
+      # apply.
+      - name: Check formatting
+        working-directory: server
+        run: cargo fmt -- --check
 
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
+      - name: Lint with clippy
+        working-directory: server
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-            - name: Build monorepo packages & web application
-              run: pnpm build
+  rust-test:
+    name: Rust Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
-            - name: Run unit & integration tests
-              run: pnpm test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # `git diff --exit-code` below is a local comparison; nothing
+          # in this job needs the persisted token either.
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        # `stable` matches server/rust-toolchain.toml.
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      # `--locked` fails the job if `server/Cargo.lock` is out of sync
+      # with `server/Cargo.toml`, so a dependency edit must update the
+      # lockfile. The suite builds disposable databases only
+      # (`server/tests/support`), never `~/.srouter/srouter.db` or a
+      # production `DATABASE_URL`.
+      - name: Run tests
+        working-directory: server
+        run: cargo test --locked
+
+      # export_ts writes both committed copies (server/bindings.ts and
+      # client/src/generated/typed.ts). server/tests/bindings.rs pins the
+      # same comparison, but doing it as its own step makes the drift show
+      # up as a named check rather than a test failure.
+      - name: Regenerate the bindings
+        working-directory: server
+        run: cargo run --locked --bin export_ts
+
+      - name: Check the bindings are current
+        run: git diff --exit-code -- server/bindings.ts client/src/generated/typed.ts

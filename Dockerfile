@@ -1,79 +1,52 @@
-# ==============================================================================
-# SRouter Production Multi-Stage Dockerfile
-# ==============================================================================
+# syntax=docker/dockerfile:1
 
-# --- Stage 1: Base image with Node 22 & PNPM ---
-FROM node:22-alpine AS base
-WORKDIR /app
+# Three stages, one runtime. The server stage compiles the crate, the web stage
+# builds the dashboard, and the runtime carries the two artifacts and nothing
+# else: distroless already ships glibc, libgcc, ca-certificates, tzdata and /tmp.
 
-# Enable Corepack & prepare PNPM
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-ENV COREPACK_ENABLE_PROJECT_SPEC=0
-RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
+FROM rust:1.99-bookworm AS server
+WORKDIR /src
+# migrations/ is compile-time input: migrations.rs embeds the .sql files with
+# include_str!. rust-toolchain.toml is deliberately absent -- the image tag pins
+# the toolchain, and copying it only invites a rustup fetch inside the build.
+COPY server/Cargo.toml server/Cargo.lock ./
+COPY server/src ./src
+COPY server/migrations ./migrations
+# target/ lives in a cache mount, and a cache mount is not a layer, so the binary
+# is copied into the image inside this same RUN. --config strips the release
+# binary without adding binutils here or a profile to Cargo.toml.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked --bin srouter-server \
+      --config 'profile.release.strip="symbols"' \
+ && cp target/release/srouter-server /srouter-server \
+ && mkdir -p /data \
+ && chown 65532:65532 /data
 
-# --- Stage 2: Dependencies and Build ---
-FROM base AS builder
-ENV CI=true
+FROM oven/bun:1.4.3-slim AS web
+WORKDIR /src
+# Manifest first so the install layer survives a source-only change.
+COPY client/package.json client/bun.lock ./
+RUN bun install --frozen-lockfile
+# client/node_modules and client/dist are in .dockerignore, so this cannot
+# clobber the tree installed above nor import a stale host dist.
+COPY client/ ./
+RUN bun run build
 
-# Copy package manifests for workspace dependency resolution & layer caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
-COPY packages/constants/package.json ./packages/constants/
-COPY packages/db/package.json ./packages/db/
-COPY packages/executors/package.json ./packages/executors/
-COPY packages/pricing/package.json ./packages/pricing/
-COPY packages/providers/package.json ./packages/providers/
-COPY packages/translator/package.json ./packages/translator/
-COPY packages/types/package.json ./packages/types/
-
-# Install all dependencies (including devDependencies needed for build)
-RUN pnpm install --frozen-lockfile
-
-# Copy full source tree
-COPY . .
-
-# Build all packages, API server, and web dashboard
-RUN pnpm build
-
-# Create a self-contained production dependency graph for the API.
-# Injected workspace packages are copied into the deployment instead of
-# remaining symlinks to the builder workspace.
-RUN pnpm --config.inject-workspace-packages=true --filter api deploy --prod /app/deploy
-
-# --- Stage 3: Production Runner ---
-FROM node:22-alpine AS runner
-WORKDIR /app
-
-# Install tzdata for accurate timezone and logging
-RUN apk add --no-cache tzdata
-
-# Set runtime environment variables
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV OAUTH_PORT=1455
-ENV DATABASE_PATH=/app/data/srouter.db
-ENV WEB_DIST_PATH=/app/apps/web/dist
-
-# Create persistent storage directory for SQLite WAL database
-RUN mkdir -p /app/data
-
-# Copy the isolated API production deployment.
-COPY --from=builder /app/deploy ./
-
-# The API serves the dashboard as static files at runtime.
-COPY --from=builder /app/apps/web/dist ./apps/web/dist
-
-# Expose API/Web port (3000) and OAuth callback receiver port (1455)
-EXPOSE 3000 1455
-
-# Declare persistent volume mount point
-VOLUME ["/app/data"]
-
-# Native health check using Node 22 built-in fetch
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
-
-# Start SRouter unified API & Dashboard server
-CMD ["node", "dist/index.js"]
+FROM gcr.io/distroless/cc-debian12:nonroot
+COPY --from=server /srouter-server /srouter-server
+# uid 65532 owns /data so a fresh named volume inherits a writable directory and
+# the process never needs root.
+COPY --from=server --chown=65532:65532 /data /data
+COPY --from=web /src/dist /web
+# NODE_ENV is absent on purpose: unset already means production (config.rs), and
+# SROUTER_FILE_LOG stays off so the log is stdout, i.e. `docker logs`.
+ENV HOME=/data \
+    DATABASE_PATH=/data/srouter.db \
+    WEB_DIST_PATH=/web
+EXPOSE 3000
+VOLUME /data
+# docker stop sends SIGTERM, but the shutdown hook listens for SIGINT only
+# (http/listeners.rs), so the default would SIGKILL the process mid-stream.
+STOPSIGNAL SIGINT
+ENTRYPOINT ["/srouter-server"]

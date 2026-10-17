@@ -1,39 +1,21 @@
 services:
-    srouter:
-        image: srouter:local
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: srouter
-        restart: unless-stopped
-        ports:
-            # SRouter Unified Gateway & Web Dashboard
-            - "${PORT:-3000}:3000"
-            # OAuth PKCE Callback Server
-            - "${OAUTH_PORT:-1455}:1455"
-        environment:
-            - NODE_ENV=production
-            - PORT=3000
-            - OAUTH_PORT=1455
-            - DATABASE_PATH=/app/data/srouter.db
-            - WEB_DIST_PATH=/app/apps/web/dist
-        volumes:
-            # Persistent storage for SQLite database (WAL mode), keys, logs, and providers
-            - srouter_data:/app/data
-            # Or uncomment below to use a local host directory instead of a named volume:
-            # - ./data:/app/data
-        healthcheck:
-            test:
-                - "CMD"
-                - "node"
-                - "-e"
-                - "fetch('http://localhost:' + (process.env.PORT || 3000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
-            interval: 30s
-            timeout: 5s
-            retries: 3
-            start_period: 5s
-
-volumes:
-    srouter_data:
-        name: srouter_data
-        driver: local
+  srouter:
+    build: .
+    image: srouter:latest
+    restart: unless-stopped
+    ports:
+      - "${SROUTER_PORT:-3000}:3000"
+    # Match the host user so SQLite has write permissions on the bind-mounted ~/.srouter directory
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      # config.rs derives srouter_dir from HOME, not from DATABASE_PATH, so the
+      # importer's temp dirs and backups stay on the same volume as the database.
+      HOME: /data
+      DATABASE_PATH: /data/srouter.db
+      WEB_DIST_PATH: /web
+      # Both are filtered when empty. An https:// URL here also turns secure
+      # cookies on, and while a password is set it is reset on every boot.
+      SROUTER_PUBLIC_URL: ${SROUTER_PUBLIC_URL:-}
+      SROUTER_ADMIN_PASSWORD: ${SROUTER_ADMIN_PASSWORD:-}
+    volumes:
+      - ~/.srouter:/data

@@ -1,0 +1,110 @@
+import { useQuery } from "@tanstack/react-query"
+import { KeyRound, Plus } from "lucide-react"
+import { useState } from "react"
+
+import { keyListQuery } from "@/api/keys"
+import type { APIKeyResponse } from "@/api/types"
+import ActionButton from "@/components/arc/action-button/action-button"
+import { Alert } from "@/components/arc/alert/alert"
+import { Button } from "@/components/arc/button/button"
+import { EmptyState } from "@/components/arc/empty-state/empty-state"
+import { Skeleton } from "@/components/arc/skeleton/skeleton"
+import { SectionHeader } from "@/components/layout/section-header"
+
+import { AddCreditDialog } from "./AddCreditDialog"
+import { CreateKeyDialog } from "./CreateKeyDialog"
+import { EditKeyDialog } from "./EditKeyDialog"
+import { KeysTable } from "./KeysTable"
+
+export function KeysView() {
+  const { data, isPending, isError, error, refetch } = useQuery(keyListQuery)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editingKey, setEditingKey] = useState<APIKeyResponse | null>(null)
+  const [creditKey, setCreditKey] = useState<APIKeyResponse | null>(null)
+
+  const keys = data?.data ?? []
+
+  async function retry() {
+    const result = await refetch()
+    if (result.error) throw result.error
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionHeader
+        title="API keys"
+        description="Issue, rotate, and restrict client authentication keys with rate, token, and spend limits."
+        badge="Access control"
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus size={14} strokeWidth={2} aria-hidden="true" />
+            Create API key
+          </Button>
+        }
+      />
+
+      {isPending && <Skeleton label="Loading keys" lines={5} />}
+
+      {isError && (
+        <Alert tone="danger" title="Could not load keys">
+          <span className="flex flex-col items-start gap-3">
+            <span className="break-words">
+              {error instanceof Error
+                ? error.message
+                : "The keys endpoint could not be reached."}
+            </span>
+            <ActionButton
+              label="Retry"
+              pendingLabel="Retrying"
+              successLabel="Loaded"
+              onAction={retry}
+              className="!border-border !bg-surface !text-foreground"
+            />
+          </span>
+        </Alert>
+      )}
+
+      {!isPending && !isError && keys.length === 0 && (
+        <EmptyState
+          icon={<KeyRound size={28} aria-hidden="true" />}
+          title="No API keys issued"
+          description="Create a key to authenticate OpenAI- and Anthropic-compatible requests against this gateway."
+          action={
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus size={14} strokeWidth={2} aria-hidden="true" />
+              Create API key
+            </Button>
+          }
+        />
+      )}
+
+      {!isPending && !isError && keys.length > 0 && (
+        <KeysTable
+          keys={keys}
+          onEditKey={(key) => setEditingKey(key)}
+          onAddCredit={(key) => setCreditKey(key)}
+        />
+      )}
+
+      <CreateKeyDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <EditKeyDialog
+        open={editingKey !== null}
+        onOpenChange={(open) => !open && setEditingKey(null)}
+        keyRecord={editingKey}
+      />
+      <AddCreditDialog
+        open={creditKey !== null}
+        onOpenChange={(open) => !open && setCreditKey(null)}
+        keyRecord={creditKey}
+      />
+    </div>
+  )
+}

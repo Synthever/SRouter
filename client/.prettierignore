@@ -1,0 +1,13 @@
+node_modules/
+coverage/
+.pnpm-store/
+pnpm-lock.yaml
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Vendor code, not ours to reformat: `arc/` is installed from the UIARC registry
+# and `ui/` is shadcn output. Formatting them rewrites shipped library source and
+# the next registry install fights the diff.
+src/components/arc/
+src/components/ui/

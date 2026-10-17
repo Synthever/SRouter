@@ -1,63 +1,34 @@
-# Dependencies
-node_modules
-.pnpm-store
-
-# Build & Compilation Outputs
-dist
-build
-out
-.turbo
-.tanstack
-
-# SQLite Database Files
-*.db
-*.db-wal
-*.db-shm
-*.db-journal
-*.sqlite
-srouter.db
-
-# Environment Variables & Secrets
 .env
-.env.local
-.env.*.local
-.env.development
-.env.production
-
-# Local overrides (never commit)
-*.local
-.local/
-
-# Logs & Debug
-/logs/
-!apps/web/src/components/logs/
+# Logs: root directory only, so client/src/components/logs is not ignored
+/logs
+server/logs
+server/target/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# System & IDE Files
-.DS_Store
-Thumbs.db
-.idea/
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
 .vscode/*
-!.vscode/settings.json
-!.vscode/launch.json
-!.vscode/*.code-snippets
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# TypeScript incremental build metadata
-apps/web/tsconfig.tsbuildinfo
-
-# Graphify knowledge graph output
-graphify-out/
-.graphify-out/
-
-# Superpowers agent scratch
+# TanStack Router scratch directory; `routeTree.gen.ts` is committed on purpose
+# (the TanStack convention) so a fresh clone typechecks before any generation.
+client/.tanstack/
+.claude
 .superpowers/
-
-
-# Lockfiles from alternative package managers (pnpm-lock.yaml is tracked for CI/Docker)
-package-lock.json
-yarn.lock
-bun.lock
-bun.lockb
+.mcp.json
