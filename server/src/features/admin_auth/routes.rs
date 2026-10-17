@@ -58,6 +58,15 @@ pub struct AdminLoginInput {
     password: String,
 }
 
+/// Fields accepted by `POST /v1/admin/change-password`. Same no-`Debug` rule:
+/// all three fields are secrets.
+#[derive(specta::Type)]
+pub struct ChangePasswordInput {
+    current_password: String,
+    new_password: String,
+    confirmation: String,
+}
+
 /// Mounts the admin-auth routes. They are nested under `/v1`, so the paths are
 /// `/v1/admin/*`, and they carry no shared guard: each handler enforces its own
 /// session requirement.

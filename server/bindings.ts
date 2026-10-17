@@ -158,6 +158,16 @@ export type CatalogResponse = {
 	categories: GroupedCatalog,
 };
 
+/**
+ *  Fields accepted by `POST /v1/admin/change-password`. Same no-`Debug` rule:
+ *  all three fields are secrets.
+ */
+export type ChangePasswordInput = {
+	current_password: string,
+	new_password: string,
+	confirmation: string,
+};
+
 /**  Fields accepted by `POST /v1/keys`, mirroring `CreateAPIKeySchema`. */
 export type CreateAPIKeyInput = {
 	name: string,

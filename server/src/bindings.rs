@@ -26,6 +26,7 @@
 //! | `AdminAuthResult`       | `POST /v1/admin/setup`, `POST /v1/admin/login` |
 //! | `AdminSetupInput`       | `POST /v1/admin/setup` body                    |
 //! | `AdminLoginInput`       | `POST /v1/admin/login` body                    |
+//! | `ChangePasswordInput`   | `POST /v1/admin/change-password` body          |
 //! | `KeyListResponse`       | `GET /v1/keys`                                 |
 //! | `APIKeyResponse`        | that list, plus the `PATCH` answer             |
 //! | `CreatedAPIKeyResponse` | `POST /v1/keys`                                |
@@ -57,7 +58,7 @@ use crate::app::{ApiInfo, HealthResponse};
 use crate::constants::ErrorCode;
 use crate::error::ErrorEnvelope;
 use crate::features::admin_auth::routes::{
-    AdminAuthResult, AdminLoginInput, AdminSetupInput, AdminStatus,
+    AdminAuthResult, AdminLoginInput, AdminSetupInput, AdminStatus, ChangePasswordInput,
 };
 use crate::features::api_keys::routes::{APIKeyResponse, CreatedAPIKeyResponse, KeyListResponse};
 use crate::features::api_keys::{CreateAPIKeyInput, UpdateAPIKeyInput};
@@ -98,6 +99,7 @@ pub fn types() -> Types {
         .register::<AdminAuthResult>()
         .register::<AdminSetupInput>()
         .register::<AdminLoginInput>()
+        .register::<ChangePasswordInput>()
         .register::<CreateAPIKeyInput>()
         .register::<UpdateAPIKeyInput>()
         .register::<APIKeyResponse>()
