@@ -214,12 +214,26 @@ pub struct CostBreakdown {
 /// before either lookup.
 const VARIANT_SUFFIXES: &[&str] = &["-high", "-medium", "-low", "-thinking", "-free"];
 
+/// The id without a vendor's dated build stamp: four digits a provider appends
+/// to the id the catalog prices under (`deepseek-v4.1-flash-1017` is a build of
+/// `deepseek-v4.1-flash`, `qwen3.8-max-0902` of `qwen3.8-max`). Unlike
+/// [`VARIANT_SUFFIXES`] the spelling is the vendor's — `MMDD`, `YYMM` — so it is
+/// matched by shape, and the base still has to be a catalog row of its own for
+/// the stamp to come off.
+fn snapshot_stem(model_key: &str) -> Option<&str> {
+    let (stem, stamp) = model_key.rsplit_once('-')?;
+    let is_stamp = stamp.len() == 4 && stamp.bytes().all(|byte| byte.is_ascii_digit());
+
+    is_stamp.then_some(stem)
+}
+
 /// The catalog row for a model id, trying the id as sent, its bare form without
 /// the provider prefix (`openai/gpt-4o` -> `gpt-4o`), then each of those with a
-/// [`VARIANT_SUFFIXES`] suffix removed. An exact catalog entry always wins, so a
-/// model that is only sold in a variant (`deepseek-v3.2-thinking`,
-/// `space-bunny-free`) keeps its own row instead of borrowing its base's —
-/// `mimo-v2.6-flash-free` holds 200k while its paid base holds 1M.
+/// [`VARIANT_SUFFIXES`] suffix or a [`snapshot_stem`] build stamp removed. An
+/// exact catalog entry always wins, so a model that is only sold in a variant
+/// (`deepseek-v3.2-thinking`, `space-bunny-free`) keeps its own row instead of
+/// borrowing its base's — `mimo-v2.6-flash-free` holds 200k while its paid base
+/// holds 1M.
 fn find_catalog_row<T: Copy>(model_id: &str, rows: &HashMap<String, T>) -> Option<T> {
     let normalized = model_id.trim().to_lowercase();
     let bare = normalized.split_once('/').map(|(_, rest)| rest);
@@ -232,6 +246,7 @@ fn find_catalog_row<T: Copy>(model_id: &str, rows: &HashMap<String, T>) -> Optio
                 VARIANT_SUFFIXES
                     .iter()
                     .find_map(|suffix| rows.get(key.strip_suffix(suffix)?).copied())
+                    .or_else(|| rows.get(snapshot_stem(key)?).copied())
             })
         })
 }
@@ -379,6 +394,10 @@ mod tests {
 
         assert_eq!(estimate_cost("mimo-v2.6-flash-free", &usage), Some(0.0));
         assert_eq!(estimate_cost("space-bunny-free", &usage), Some(0.0));
+        assert_eq!(
+            estimate_cost("mimo-v2.6-flash-free-1017", &usage),
+            Some(0.0)
+        );
         assert!(
             estimate_cost("mimo-v2.6-flash", &usage).is_some_and(|cost| cost > 0.0),
             "the paid sibling still prices above zero"
@@ -397,6 +416,29 @@ mod tests {
             let cost = estimate_cost(free, &usage);
             assert!(cost.is_some_and(|cost| cost > 0.0), "{free} must be priced");
             assert_eq!(cost, estimate_cost(base, &usage), "{free} vs {base}");
+        }
+    }
+
+    /// The reported bug: a vendor's dated build the catalog does not carry yet
+    /// (`deepseek-v4.1-flash-1017`) used to price as unknown, so real usage showed
+    /// up as $0.00 while the un-stamped sibling it was cut from priced normally.
+    #[test]
+    fn a_dated_build_prices_like_the_model_it_was_cut_from() {
+        let usage = usage(1_000_000, 500_000);
+
+        for (build, base) in [
+            ("deepseek-v4.1-flash-1017", "deepseek-v4.1-flash"),
+            ("qwen3.8-max-0902", "qwen3.8-max"),
+            // A prefixed build loses the stamp the same way and then resolves
+            // through the same ladder as its un-stamped sibling.
+            (
+                "cline/deepseek/deepseek-v4.1-flash-1017",
+                "cline/deepseek/deepseek-v4.1-flash",
+            ),
+        ] {
+            let cost = estimate_cost(build, &usage);
+            assert!(cost.is_some(), "{build} must be priced");
+            assert_eq!(cost, estimate_cost(base, &usage), "{build} vs {base}");
         }
     }
 
@@ -424,6 +466,7 @@ mod tests {
 
         assert_eq!(estimate_cost("no-such-model-high", &usage), None);
         assert_eq!(estimate_cost("no-such-model-free", &usage), None);
+        assert_eq!(estimate_cost("no-such-model-1017", &usage), None);
     }
 
     /// The context guard reads the same snapshot as the price, so an id the
@@ -444,6 +487,16 @@ mod tests {
                 "{variant} vs {base}"
             );
         }
+    }
+
+    /// The price and the window are keyed by the same catalog row, so a build the
+    /// catalog only lists under its base has to resolve that base's window too.
+    #[test]
+    fn a_dated_build_resolves_the_window_of_the_model_it_was_cut_from() {
+        assert_eq!(
+            context_limit("deepseek-v4.1-flash-1017"),
+            context_limit("deepseek-v4.1-flash")
+        );
     }
 
     /// A variant the catalog carries in its own right keeps its own window: the
