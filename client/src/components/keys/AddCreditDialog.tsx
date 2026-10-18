@@ -6,17 +6,12 @@ import { addAPIKeyCredit } from "@/api/keys"
 import type { APIKeyResponse } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Alert } from "@/components/arc/alert/alert"
-import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-} from "@/components/arc/dialog/dialog"
+import { DialogClose } from "@/components/arc/dialog/dialog"
 import { FloatingField } from "@/components/arc/floating-field/floating-field"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
+import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"
 import { MONEY } from "@/components/usage/types"
-import useMediaQuery from "@/hooks/useMediaQuery"
 
 type AddCreditDialogProps = {
   open: boolean
@@ -34,7 +29,6 @@ export function AddCreditDialog({
   onOpenChange,
   keyRecord,
 }: AddCreditDialogProps) {
-  const isMobile = useMediaQuery("(max-width: 639px)")
   const queryClient = useQueryClient()
   const [amount, setAmount] = useState("")
   const [failure, setFailure] = useState<string | null>(null)
@@ -115,22 +109,11 @@ export function AddCreditDialog({
       )}
 
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="secondary" size="md">
             Cancel
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="secondary" size="md">
-              Cancel
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
         <ActionButton
           ref={submitRef}
           type="submit"
@@ -145,26 +128,16 @@ export function AddCreditDialog({
     </form>
   )
 
-  if (isMobile) {
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={handleOpenChange}
-        title={title}
-        description={description}
-        detents={[0.45, 0.8]}
-        initialDetent={0}
-      >
-        <div className="p-4">{formBody}</div>
-      </BottomSheet>
-    )
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent title={title} description={description} className="sm:max-w-lg">
-        {formBody}
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      detents={[0.45, 0.8]}
+      className="sm:max-w-lg"
+    >
+      {formBody}
+    </ResponsiveDialog>
   )
 }

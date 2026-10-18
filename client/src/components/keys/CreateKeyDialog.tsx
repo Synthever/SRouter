@@ -5,16 +5,11 @@ import type { FormEvent } from "react"
 import { createAPIKey } from "@/api/keys"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Alert } from "@/components/arc/alert/alert"
-import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
 import { CopyButton } from "@/components/arc/copy-button/copy-button"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-} from "@/components/arc/dialog/dialog"
+import { DialogClose } from "@/components/arc/dialog/dialog"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
-import useMediaQuery from "@/hooks/useMediaQuery"
+import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"
 
 import {
   EMPTY_KEY_FORM,
@@ -29,7 +24,6 @@ type CreateKeyDialogProps = {
 }
 
 export function CreateKeyDialog({ open, onOpenChange }: CreateKeyDialogProps) {
-  const isMobile = useMediaQuery("(max-width: 639px)")
   const queryClient = useQueryClient()
   const [values, setValues] = useState<KeyFormValues>(EMPTY_KEY_FORM)
   const [secret, setSecret] = useState<string | null>(null)
@@ -90,9 +84,7 @@ export function CreateKeyDialog({ open, onOpenChange }: CreateKeyDialogProps) {
     >
       <KeyFormFields
         values={values}
-        onChange={(patch) =>
-          setValues((current) => ({ ...current, ...patch }))
-        }
+        onChange={(patch) => setValues((current) => ({ ...current, ...patch }))}
         showEnabled
       />
 
@@ -103,22 +95,11 @@ export function CreateKeyDialog({ open, onOpenChange }: CreateKeyDialogProps) {
       )}
 
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="secondary" size="md">
             Cancel
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="secondary" size="md">
-              Cancel
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
         <ActionButton
           ref={submitRef}
           type="submit"
@@ -145,50 +126,24 @@ export function CreateKeyDialog({ open, onOpenChange }: CreateKeyDialogProps) {
         <CopyButton value={secret ?? ""} label="Copy key" />
       </div>
       <div className="flex justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="primary" size="md">
             Done
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="primary" size="md">
-              Done
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
       </div>
     </div>
   )
 
-  if (isMobile) {
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={handleOpenChange}
-        title={title}
-        description={description}
-        detents={[0.55, 0.92]}
-        initialDetent={0}
-      >
-        <div className="p-4">{secret === null ? formBody : secretBody}</div>
-      </BottomSheet>
-    )
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        title={title}
-        description={description}
-        className="sm:max-w-lg"
-      >
-        {secret === null ? formBody : secretBody}
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-lg"
+    >
+      {secret === null ? formBody : secretBody}
+    </ResponsiveDialog>
   )
 }

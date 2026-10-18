@@ -13,7 +13,7 @@ use srouter_server::features::api_keys::{
     APIKey, APIKeyRepository, CreateAPIKeyInput, CreatedAPIKey, UpdateAPIKeyInput,
 };
 use srouter_server::features::gateway::token_saver::TERSE_DIRECTIVE;
-use srouter_server::{APIError, SecurityState};
+use srouter_server::{APIError, AppState, SecurityState};
 use support::{
     FakeUpstream, FixtureAPIKeyStore, FixtureAdminSessionStore, TestDatabase, api_key_record,
     app_state_with_fake_upstream, app_state_with_fake_upstream_and_security, with_loopback_client,
@@ -1652,5 +1652,103 @@ async fn a_failed_request_is_logged_with_its_message() {
             .is_some_and(|message| message.contains("401")),
         "the row must carry the rejection the client saw, got {:?}",
         row.error.error_message
+    );
+}
+
+/// The reported bug: a vendor's dated build is not a catalog row of its own, so
+/// `exp/deepseek-v4.1-flash-1017` logged $0.00 while the un-stamped sibling it
+/// was cut from priced normally.
+#[tokio::test]
+async fn a_dated_build_is_priced_into_the_request_log() {
+    use srouter_server::features::providers::ProviderRegistry;
+    use srouter_server::features::providers::adapter::{OpenAIAdapter, ProviderAdapter};
+    use srouter_server::features::providers::model::ModelDefinition;
+    use srouter_server::infrastructure::upstream::UpstreamClient;
+    use srouter_server::protocol::usage::UsageBreakdown;
+
+    let test_db = TestDatabase::new().expect("test db");
+    let upstream = FakeUpstream::start().await;
+
+    let mut providers = ProviderRegistry::new();
+    providers.register(ProviderAdapter::new(OpenAIAdapter::new(
+        "exp",
+        &["exp"],
+        upstream.base_url(),
+        &[ModelDefinition {
+            id: "deepseek-v4.1-flash-1017",
+            name: "DeepSeek V4.1 Flash",
+        }],
+        UpstreamClient::new().expect("upstream client"),
+    )));
+
+    let state = AppState::with_registry(support::test_config(), providers)
+        .with_database(test_db.connect().await.expect("db connect"));
+    let app = create_router(state);
+
+    // The fake upstream gates a model that is not `space-bunny` on the harness
+    // tools, so the request declares them the way a coding agent would.
+    let body = serde_json::json!({
+        "model": "exp/deepseek-v4.1-flash-1017",
+        "messages": [ { "role": "user", "content": "Price this build" } ],
+        "stream": false,
+        "tools": [
+            { "type": "function", "function": { "name": "read" } },
+            { "type": "function", "function": { "name": "shell" } }
+        ]
+    });
+
+    let response = app
+        .oneshot(chat_request("/v1/chat/completions", body))
+        .await
+        .expect("gateway response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(upstream.chat_requests(), 1);
+
+    let pool = test_db
+        .connect()
+        .await
+        .expect("db connect")
+        .sqlite_pool()
+        .expect("sqlite pool");
+    let (model, resolved_model, prompt_tokens, completion_tokens, cached_tokens, estimated_cost): (
+        String,
+        String,
+        i64,
+        i64,
+        i64,
+        f64,
+    ) = sqlx::query_as(
+        "SELECT model, resolved_model, prompt_tokens, completion_tokens, cached_tokens, \
+         estimated_cost FROM request_logs",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("logged request");
+
+    assert_eq!(model, "exp/deepseek-v4.1-flash-1017");
+    assert_eq!(resolved_model, "deepseek-v4.1-flash-1017");
+    assert!(
+        estimated_cost > 0.0,
+        "the dated build must log a cost, got {estimated_cost}"
+    );
+
+    // The billed rate of the model this build was cut from, for exactly the usage
+    // the row recorded, so a differently-shaped usage report cannot make the two
+    // sides agree by accident.
+    let base_rate = srouter_server::features::catalog::estimate_cost(
+        "deepseek-v4.1-flash",
+        &UsageBreakdown {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            cached_tokens,
+            cache_creation_tokens: 0,
+            reasoning_tokens: 0,
+        },
+    )
+    .expect("the un-stamped id is a catalog row");
+    assert_eq!(
+        estimated_cost, base_rate,
+        "the build must bill at the rate of the model it was cut from"
     );
 }

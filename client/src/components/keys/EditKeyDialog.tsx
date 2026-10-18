@@ -6,15 +6,10 @@ import { updateAPIKey } from "@/api/keys"
 import type { APIKeyResponse } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Alert } from "@/components/arc/alert/alert"
-import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-} from "@/components/arc/dialog/dialog"
+import { DialogClose } from "@/components/arc/dialog/dialog"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
-import useMediaQuery from "@/hooks/useMediaQuery"
+import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"
 
 import {
   EMPTY_KEY_FORM,
@@ -38,7 +33,6 @@ export function EditKeyDialog({
   onOpenChange,
   keyRecord,
 }: EditKeyDialogProps) {
-  const isMobile = useMediaQuery("(max-width: 639px)")
   const queryClient = useQueryClient()
   const [values, setValues] = useState<KeyFormValues>(EMPTY_KEY_FORM)
   const [seedID, setSeedID] = useState<string | null>(null)
@@ -52,7 +46,8 @@ export function EditKeyDialog({
     setFailure(null)
   }
 
-  const patch = keyRecord === null ? null : updateInputFromForm(values, keyRecord)
+  const patch =
+    keyRecord === null ? null : updateInputFromForm(values, keyRecord)
   const named = values.name.trim().length > 0
   const changed = patch !== null && Object.keys(patch).length > 0
 
@@ -104,9 +99,7 @@ export function EditKeyDialog({
     >
       <KeyFormFields
         values={values}
-        onChange={(next) =>
-          setValues((current) => ({ ...current, ...next }))
-        }
+        onChange={(next) => setValues((current) => ({ ...current, ...next }))}
       />
 
       {failure !== null && (
@@ -122,22 +115,11 @@ export function EditKeyDialog({
       )}
 
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="secondary" size="md">
             Cancel
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="secondary" size="md">
-              Cancel
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
         <ActionButton
           ref={submitRef}
           type="submit"
@@ -152,30 +134,15 @@ export function EditKeyDialog({
     </form>
   )
 
-  if (isMobile) {
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={handleOpenChange}
-        title={title}
-        description={description}
-        detents={[0.55, 0.92]}
-        initialDetent={0}
-      >
-        <div className="p-4">{formBody}</div>
-      </BottomSheet>
-    )
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        title={title}
-        description={description}
-        className="sm:max-w-lg"
-      >
-        {formBody}
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-lg"
+    >
+      {formBody}
+    </ResponsiveDialog>
   )
 }

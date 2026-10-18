@@ -153,7 +153,7 @@ export function describe(error: unknown): string { … }
 
 - Function components only; `StrictMode` is on, so effects run twice in dev — an effect that is not idempotent is a bug, not a dev-only quirk.
 - Named exports for components (`export function ThemeProvider`, `export { Button, buttonVariants }`). Route files export a `Route` const, which is the one exception.
-- **Single-export hooks/utilities MUST use `export default` only.** When a hook file (typically in `hooks/*`) or single-purpose utility exports only one function/item, it is strictly required to use `export default` only. **It is forbidden to have both named export and default export** (do not write `export function useX` alongside `export default useX`). Callers import it without braces (`import useClipboard from "@/hooks/useClipboard"`).
+- **One function per file MUST use `export default` only.** A file that exports a single function — a hook in `hooks/*`, a utility, or a component — uses `export default` and no named export beside it (owner's rule, stated 2026-10-18; do not write `export function useX` alongside `export default useX`). Callers import it without braces (`import useClipboard from "@/hooks/useClipboard"`, `import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"`). This governs new files: existing named exports are not renamed to comply.
 - **Multiple-export hooks/modules MUST use named `export` only.** When a file exports more than one item (multiple hooks or functions), use named exports only (`export function useA`, `export function useB`), and do not use `export default`. Callers import them with braces (`import { useA, useB } from "@/hooks/use..."`).
 - Props are a `type` above the component; spread-through components keep the primitive's props and add variants (`ButtonPrimitive.Props & VariantProps<typeof buttonVariants>`).
 - Forward a `data-slot="<name>"` attribute on wrapped primitives, matching the shadcn output.
@@ -205,17 +205,17 @@ No external form library (like TanStack Form or React Hook Form) is installed. T
 
 ## Naming
 
-| Thing           | Convention               | Example                                           |
-| --------------- | ------------------------ | ------------------------------------------------- |
-| `*.tsx` files   | PascalCase, no hyphens   | `ThemeProvider.tsx`, `TokenFormPanel.tsx`         |
-| Directories     | kebab-case               | `arc/floating-field/`, `arc/sortable-data-table/` |
-| Components      | PascalCase, named export | `GaugeTooltip`, `Button`                          |
-| Hooks           | `useX.ts`, `useX` export | `useOAuthFlow.ts` → `useOAuthFlow`                |
-| Query factories | `xQuery`                 | `adminStatusQuery`                                |
-| Types           | PascalCase               | `LoginSearch`, `GaugeFit`                         |
-| Route IDs       | the file path            | `createFileRoute("/_authenticated/keys")`         |
-| Local helpers   | verb phrase, lowercase   | `describe`, `afterAuth`, `isEditableTarget`       |
-| Acronyms / ID   | uppercase, never mixed case | `useAPIKey`, `providerID`, `keyID`            |
+| Thing           | Convention                                                                           | Example                                           |
+| --------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `*.tsx` files   | PascalCase, no hyphens                                                               | `ThemeProvider.tsx`, `TokenFormPanel.tsx`         |
+| Directories     | kebab-case                                                                           | `arc/floating-field/`, `arc/sortable-data-table/` |
+| Components      | PascalCase; a one-component file is `export default`, vendor keeps its named exports | `ResponsiveDialog`                                |
+| Hooks           | `useX.ts`, `useX` export                                                             | `useOAuthFlow.ts` → `useOAuthFlow`                |
+| Query factories | `xQuery`                                                                             | `adminStatusQuery`                                |
+| Types           | PascalCase                                                                           | `LoginSearch`, `GaugeFit`                         |
+| Route IDs       | the file path                                                                        | `createFileRoute("/_authenticated/keys")`         |
+| Local helpers   | verb phrase, lowercase                                                               | `describe`, `afterAuth`, `isEditableTarget`       |
+| Acronyms / ID   | uppercase, never mixed case                                                          | `useAPIKey`, `providerID`, `keyID`                |
 
 `*.tsx` filenames are PascalCase with no hyphens throughout `client/src`. This is a forward-looking rule: do not rename existing files, and keep TanStack route filenames unchanged unless a separate task explicitly requests a route rename. The only filename exception is the frozen vendor code under `components/ui/`, `components/arc/`, and `components/gauge/`; never rename files in those folders. Directories remain kebab-case except feature directories that intentionally use PascalCase, such as `modals/ConnectAccounts/`.
 
@@ -224,11 +224,13 @@ No external form library (like TanStack Form or React Hook Form) is installed. T
 **Everywhere else under `components/`, exported identifiers are PascalCase.** In `components/layout/`, `components/providers/`, and the root files (`theme-provider.tsx`, `admin-auth-provider.tsx`), a component, hook, context, or type is PascalCase: `AppShell`, `SectionHeader`, `Sidebar`, `Topbar`, `ProviderLogo`, `APIKeyPanel`, `OAuthPanel`, `TokenFormPanel`, `ConnectAccountModal`, `useAdminAuth`. Apply it to new code; do not rename an existing identifier just to comply unless the task asks for that rename.
 
 **Hook export rules (`hooks/*`)**:
+
 - **Single export:** Saat export-nya hanya satu, WAJIB menggunakan `export default` saja. Dilarang ada dua (dilarang ada named `export` dan `export default` sekaligus dalam satu file). Di-import tanpa kurung kurawal: `import useX from "@/hooks/useX"`.
 - **Multiple exports:** Saat export-nya lebih dari satu, WAJIB menggunakan named `export` saja (`export function useA()`, `export function useB()`), dan dilarang menggunakan `export default`. Di-import dengan kurung kurawal: `import { useA, useB } from "@/hooks/..."`.
 
 **Acronyms and ID casing: `API` and `ID` must be uppercase.**
 Acronyms and identifiers must stay in uppercase across everything you write — hooks, variables, types, props, components:
+
 - If it has "Api", it must be **`API`** (never `Api`): e.g. `useAPIKey`, `APIError`, `APIResponse`, `APIKeyStore`.
 - If it has "id" / "Id", it must be **`ID`** (never `Id` or lowercase `id` in camelCase/PascalCase identifiers): e.g. `providerID` (never `providerId`), `keyID` (never `keyId`), `userID` (never `userId`), `modelID` (never `modelId`).
 

@@ -9,18 +9,13 @@ import { toast } from "@/components/arc/toast-stack/toast-stack"
 import type { ProviderProtocol } from "@/api/types"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Badge } from "@/components/arc/badge/badge"
-import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
 import { FloatingField } from "@/components/arc/floating-field/floating-field"
 import { RadioCards } from "@/components/arc/radio-cards/radio-cards"
 import SegmentedControl from "@/components/arc/segmented-control/segmented-control"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-} from "@/components/arc/dialog/dialog"
+import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"
+import { DialogClose } from "@/components/arc/dialog/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import useMediaQuery from "@/hooks/useMediaQuery"
 
 type KeyInputMode = "single" | "bulk"
 
@@ -126,7 +121,6 @@ export function AddCustomProviderDialog({
     string | null
   >(null)
   const [addAttempted, setAddAttempted] = useState(false)
-  const isMobile = useMediaQuery("(max-width: 639px)")
 
   const bulkParsed = useMemo(
     () => parseBulkAPIKeys(form.bulk_keys_raw),
@@ -495,22 +489,11 @@ export function AddCustomProviderDialog({
       </div>
 
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="secondary" size="md">
             Cancel
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="secondary" size="md">
-              Cancel
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
         <ActionButton
           ref={submitButtonRef}
           type="submit"
@@ -530,30 +513,17 @@ export function AddCustomProviderDialog({
     </form>
   )
 
-  if (isMobile) {
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={handleOpenChange}
-        title={title}
-        description={description}
-        detents={[0.85, 0.96]}
-        initialDetent={0}
-      >
-        <div className="space-y-4 px-1 pt-1 pb-6">{formContent}</div>
-      </BottomSheet>
-    )
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        title={title}
-        description={description}
-        className="!max-h-[92vh] sm:max-w-2xl"
-      >
-        {formContent}
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      detents={[0.85, 0.96]}
+      className="!max-h-[92vh] sm:max-w-2xl"
+      sheetClassName="space-y-4 px-1 pt-1 pb-6"
+    >
+      {formContent}
+    </ResponsiveDialog>
   )
 }
