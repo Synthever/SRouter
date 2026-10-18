@@ -4,16 +4,11 @@ import type { FormEvent } from "react"
 import { changeAdminPassword } from "@/api/admin"
 import ActionButton from "@/components/arc/action-button/action-button"
 import { Alert } from "@/components/arc/alert/alert"
-import { BottomSheet } from "@/components/arc/bottom-sheet/bottom-sheet"
 import { Button } from "@/components/arc/button/button"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-} from "@/components/arc/dialog/dialog"
+import { DialogClose } from "@/components/arc/dialog/dialog"
 import { PasswordField } from "@/components/arc/password-field/password-field"
 import { toast } from "@/components/arc/toast-stack/toast-stack"
-import useMediaQuery from "@/hooks/useMediaQuery"
+import ResponsiveDialog from "@/components/seavx/ResponsiveDialog"
 
 type ChangePasswordDialogProps = {
   open: boolean
@@ -28,7 +23,6 @@ export function ChangePasswordDialog({
   open,
   onOpenChange,
 }: ChangePasswordDialogProps) {
-  const isMobile = useMediaQuery("(max-width: 639px)")
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirmation, setConfirmation] = useState("")
@@ -131,22 +125,11 @@ export function ChangePasswordDialog({
       ) : null}
 
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            onClick={() => handleOpenChange(false)}
-          >
+        <DialogClose asChild>
+          <Button type="button" variant="secondary" size="md">
             Cancel
           </Button>
-        ) : (
-          <DialogClose asChild>
-            <Button type="button" variant="secondary" size="md">
-              Cancel
-            </Button>
-          </DialogClose>
-        )}
+        </DialogClose>
         <ActionButton
           ref={submitRef}
           type="submit"
@@ -161,30 +144,15 @@ export function ChangePasswordDialog({
     </form>
   )
 
-  if (isMobile) {
-    return (
-      <BottomSheet
-        open={open}
-        onOpenChange={handleOpenChange}
-        title={title}
-        description={description}
-        detents={[0.55, 0.92]}
-        initialDetent={0}
-      >
-        <div className="p-4">{formBody}</div>
-      </BottomSheet>
-    )
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        title={title}
-        description={description}
-        className="sm:max-w-lg"
-      >
-        {formBody}
-      </DialogContent>
-    </Dialog>
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      className="sm:max-w-lg"
+    >
+      {formBody}
+    </ResponsiveDialog>
   )
 }
